@@ -2,9 +2,9 @@
 #
 # Build on Windows (PyInstaller can't cross-compile):
 #   pip install -r requirements.txt pyinstaller
-#   pyinstaller --noconfirm tapzaplite-windows.spec
+#   pyinstaller --noconfirm eyeease-windows.spec
 #
-# Produces dist/TapZapLite.exe — a single portable executable, no console
+# Produces dist/EyeEase.exe — a single portable executable, no console
 # window (console=False below), matching how RedShift ships on Windows.
 #
 # PyInstaller can't cross-compile: it silently builds for whatever OS it
@@ -13,7 +13,7 @@
 import platform
 if platform.system() != "Windows":
     raise SystemExit(
-        "tapzaplite-windows.spec must be run with PyInstaller on Windows "
+        "eyeease-windows.spec must be run with PyInstaller on Windows "
         f"(detected {platform.system()}) — PyInstaller cannot cross-compile."
     )
 
@@ -37,7 +37,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="TapZapLite",
+    name="EyeEase",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

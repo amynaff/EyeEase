@@ -1,4 +1,4 @@
-# Tap Zap Lite
+# EyeEase
 
 Free, minimal blue-light blocker for Mac and Windows — same idea as RedShift
 (gamma-table manipulation), styled after Tap Zap: two sliders, three presets,
@@ -46,7 +46,7 @@ A small panel appears with:
 - Closing the panel just hides it to the tray icon; use Quit from the tray
   menu to fully exit (this also resets your screen automatically)
 
-Settings are saved to `~/.tapzaplite_settings.json` and restored next launch.
+Settings are saved to `~/.eyeease_settings.json` and restored next launch.
 
 ## What's deliberately left out of this version
 PWM-safe mode only reaches the primary/built-in display. Extending it to
@@ -67,10 +67,10 @@ silently doing nothing.
 ## Packaging into a real .app (macOS)
 ```
 CFLAGS="-Wno-error=default-const-init-var-unsafe" pip3 install pyinstaller
-pyinstaller --noconfirm tapzaplite.spec
+pyinstaller --noconfirm eyeease.spec
 ```
 
-Produces `dist/TapZapLite.app`, a double-clickable app with no Dock icon or
+Produces `dist/EyeEase.app`, a double-clickable app with no Dock icon or
 app-switcher entry (`LSUIElement` in the spec's `info_plist`) — it only ever
 shows up as the tray icon, matching how it behaves when run from source.
 `build/` and `dist/` are gitignored; rerun the command above to rebuild
@@ -79,10 +79,10 @@ after code changes.
 ## Packaging into a real .exe (Windows)
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --noconfirm tapzaplite-windows.spec
+pyinstaller --noconfirm eyeease-windows.spec
 ```
 
-Produces `dist/TapZapLite.exe`, a single portable executable with no
+Produces `dist/EyeEase.exe`, a single portable executable with no
 console window. Must be run with PyInstaller *on Windows* — PyInstaller
 can't cross-compile, and the spec deliberately refuses to run on any other
 OS rather than silently producing a same-platform binary with the wrong

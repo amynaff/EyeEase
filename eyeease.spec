@@ -19,7 +19,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="TapZapLite",
+    name="EyeEase",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -39,14 +39,14 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="TapZapLite",
+    name="EyeEase",
 )
 
 app = BUNDLE(
     coll,
-    name="TapZapLite.app",
+    name="EyeEase.app",
     icon="assets/icon.icns",
-    bundle_identifier="com.tapzaplite.app",
+    bundle_identifier="com.eyeease.app",
     info_plist={
         # Menu-bar-only utility: no Dock icon, no app switcher entry.
         "LSUIElement": True,

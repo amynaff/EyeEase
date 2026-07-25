@@ -1,6 +1,6 @@
 """
 tray.py — a small icon in the menu bar (Mac) / system tray (Windows) that
-shows/hides the control panel, matching how RedShift and Tap Zap both live
+shows/hides the control panel, matching how RedShift and EyeEase both live
 in the tray rather than the dock/taskbar.
 """
 
@@ -31,7 +31,7 @@ def make_icon_image():
 
 
 def run_tray(app):
-    """app is the TapZapLiteApp instance (a customtkinter window)."""
+    """app is the EyeEaseApp instance (a customtkinter window)."""
 
     def on_show(icon, item):
         app.after(0, app.deiconify)
@@ -41,9 +41,9 @@ def run_tray(app):
         app.after(0, app.on_close)
 
     icon = pystray.Icon(
-        "tapzaplite",
+        "eyeease",
         make_icon_image(),
-        "Tap Zap Lite",
+        "EyeEase",
         menu=pystray.Menu(
             pystray.MenuItem("Show panel", on_show, default=True),
             pystray.MenuItem("Quit", on_quit),

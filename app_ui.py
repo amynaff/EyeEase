@@ -11,7 +11,7 @@ import customtkinter as ctk
 
 from gamma import GammaController
 
-SETTINGS_PATH = os.path.expanduser("~/.tapzaplite_settings.json")
+SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
 PRESETS = {
     "Reading": {"warmth": 0.55, "brightness": 0.9},
@@ -39,7 +39,7 @@ def save_settings(data):
         pass
 
 
-class TapZapLiteApp(ctk.CTk):
+class EyeEaseApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         ctk.set_appearance_mode("dark")
