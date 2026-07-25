@@ -12,7 +12,21 @@ what's on screen, while brightness scales all three curves together as a
 software dim. `gamma.py` has the full explanation inline.
 
 ## Setup
-Requires Python 3.9+.
+Requires Python 3.9+ with Tk support.
+
+On macOS, check `python3 -c "import tkinter; print(tkinter.TkVersion)"` before
+anything else. If `which python3` resolves to Xcode's Command Line Tools
+(`/Applications/Xcode.app/Contents/Developer/usr/bin/python3` or similar),
+it links against the ancient system Tcl/Tk 8.5, which is unmaintained and
+renders windows as blank white on modern macOS — the panel builds fine, it
+just never paints. Use a Python with Tk 8.6+ instead, e.g.:
+
+```
+brew install python-tk@3.14   # or whichever python version you use
+```
+
+then run everything below with that `python3` (a venv keeps it isolated:
+`python3 -m venv .venv && source .venv/bin/activate`).
 
 ```
 pip3 install -r requirements.txt
@@ -65,6 +79,11 @@ versions without notice — if that happens, `enable_pwm_safe()` fails closed
 silently doing nothing.
 
 ## Packaging into a real .app (macOS)
+Use the same Tk-capable `python3` called out in Setup above — PyInstaller
+bundles whichever Tcl/Tk your interpreter is linked against, so building with
+Xcode's stub `python3` ships the broken system Tk 8.5 inside the `.app` and
+reproduces the blank-white-window issue for anyone who runs it.
+
 ```
 CFLAGS="-Wno-error=default-const-init-var-unsafe" pip3 install pyinstaller
 pyinstaller --noconfirm eyeease.spec
