@@ -14,6 +14,7 @@ brightness: 0.15 -> 1.0 (scales all three channels down together, a software dim
 import sys
 import ctypes
 import platform
+import subprocess
 
 RAMP_SIZE = 256
 
@@ -50,6 +51,7 @@ class GammaController:
 
     def __init__(self):
         self.system = platform.system()  # 'Darwin', 'Windows', 'Linux'
+        self._saved_hw_brightness = None  # set while PWM-safe mode is active
 
     def apply(self, warmth: float, brightness: float):
         red, green, blue = build_ramp(warmth, brightness)
@@ -63,6 +65,120 @@ class GammaController:
     def reset(self):
         """Restore a normal, unmodified screen."""
         self.apply(warmth=0.0, brightness=1.0)
+
+    # -- PWM-safe mode ---------------------------------------------------
+    # The "brightness" slider above only ever dims via the gamma ramp — it
+    # never touches the physical backlight. But the OS's own brightness
+    # keys/slider do, and most laptop backlights use PWM (rapid on/off
+    # flicker) to dim below 100%, which is what causes eye strain for
+    # PWM-sensitive people. PWM-safe mode locks the physical backlight to
+    # 100% (flicker-free) so all dimming happens in the gamma ramp instead.
+    #
+    # Only the built-in/primary display is supported. External monitors
+    # need DDC/CI, which has no built-in OS API on either platform (RedShift
+    # doesn't support it either) — left as a future step.
+
+    def enable_pwm_safe(self):
+        """Locks the physical backlight to 100%, remembering the old level
+        so it can be restored later. Returns True on success."""
+        current = self._get_hw_brightness()
+        if current is None:
+            return False
+        self._saved_hw_brightness = current
+        return self._set_hw_brightness(1.0)
+
+    def disable_pwm_safe(self):
+        """Restores the physical backlight to whatever it was before
+        enable_pwm_safe() was called."""
+        if self._saved_hw_brightness is not None:
+            self._set_hw_brightness(self._saved_hw_brightness)
+            self._saved_hw_brightness = None
+
+    def _get_hw_brightness(self):
+        try:
+            if self.system == "Darwin":
+                return self._get_hw_brightness_macos()
+            elif self.system == "Windows":
+                return self._get_hw_brightness_windows()
+        except Exception:
+            pass
+        return None
+
+    def _set_hw_brightness(self, level: float) -> bool:
+        try:
+            if self.system == "Darwin":
+                return self._set_hw_brightness_macos(level)
+            elif self.system == "Windows":
+                return self._set_hw_brightness_windows(level)
+        except Exception:
+            pass
+        return False
+
+    # CoreDisplay is a private framework, but it's the same one the popular
+    # `brightness` CLI and several menu-bar apps use to reach the built-in
+    # panel on both Intel and Apple Silicon Macs (IOKit's public API stopped
+    # working for internal displays on Apple Silicon).
+    def _core_display(self):
+        return ctypes.CDLL(
+            "/System/Library/PrivateFrameworks/CoreDisplay.framework/CoreDisplay"
+        )
+
+    def _main_display_id(self):
+        cg = ctypes.CDLL(
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+        )
+        return cg.CGMainDisplayID()
+
+    def _get_hw_brightness_macos(self):
+        core_display = self._core_display()
+        display_id = self._main_display_id()
+        core_display.CoreDisplay_Display_GetUserBrightness.restype = ctypes.c_double
+        value = core_display.CoreDisplay_Display_GetUserBrightness(display_id)
+        return float(value)
+
+    def _set_hw_brightness_macos(self, level: float) -> bool:
+        core_display = self._core_display()
+        display_id = self._main_display_id()
+        core_display.CoreDisplay_Display_SetUserBrightness(
+            display_id, ctypes.c_double(level)
+        )
+        return True
+
+    # Windows exposes the internal laptop panel's brightness through WMI
+    # (root\wmi, WmiMonitorBrightness / WmiMonitorBrightnessMethods) rather
+    # than a plain Win32 call. Shelling out to PowerShell avoids adding a
+    # WMI client dependency just for this.
+    def _get_hw_brightness_windows(self):
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-WmiObject -Namespace root/wmi "
+                "-Class WmiMonitorBrightness).CurrentBrightness",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return int(result.stdout.strip()) / 100.0
+
+    def _set_hw_brightness_windows(self, level: float) -> bool:
+        percent = max(0, min(100, round(level * 100)))
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-WmiObject -Namespace root/wmi "
+                "-Class WmiMonitorBrightnessMethods)."
+                f"WmiSetBrightness(1, {percent})",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
 
     # -- macOS ---------------------------------------------------------
     def _apply_macos(self, red, green, blue):

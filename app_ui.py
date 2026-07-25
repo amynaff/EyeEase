@@ -21,7 +21,7 @@ PRESETS = {
 
 
 def load_settings():
-    defaults = {"warmth": 0.6, "brightness": 0.8, "is_on": True}
+    defaults = {"warmth": 0.6, "brightness": 0.8, "is_on": True, "pwm_safe": False}
     if os.path.exists(SETTINGS_PATH):
         try:
             with open(SETTINGS_PATH) as f:
@@ -49,11 +49,13 @@ class TapZapLiteApp(ctk.CTk):
         self.settings = load_settings()
 
         self.title("")
-        self.geometry("300x300")
+        self.geometry("300x340")
         self.resizable(False, False)
         self.attributes("-topmost", True)  # small utility window stays on top
 
         self._build_ui()
+        if self.settings["pwm_safe"]:
+            self.gamma.enable_pwm_safe()
         self._apply_current()
 
     def _build_ui(self):
@@ -94,6 +96,16 @@ class TapZapLiteApp(ctk.CTk):
                 command=lambda n=name: self._apply_preset(n),
             ).pack(side="left", expand=True, padx=4)
 
+        self.pwm_switch = ctk.CTkSwitch(
+            self,
+            text="PWM-safe mode",
+            font=ctk.CTkFont(size=12),
+            command=self._toggle_pwm_safe,
+        )
+        if self.settings["pwm_safe"]:
+            self.pwm_switch.select()
+        self.pwm_switch.pack(anchor="w", padx=20, pady=(0, 16))
+
         self._update_zap_button()
 
     def _add_slider(self, label, pad, initial, min_val=0.0):
@@ -124,6 +136,20 @@ class TapZapLiteApp(ctk.CTk):
         self._update_zap_button()
         self._apply_current()
 
+    def _toggle_pwm_safe(self):
+        turning_on = self.pwm_switch.get() == 1
+        if turning_on:
+            if not self.gamma.enable_pwm_safe():
+                # Couldn't reach the backlight (unsupported hardware, no
+                # permission, etc.) — leave the switch off instead of
+                # claiming a mode that isn't actually active.
+                self.pwm_switch.deselect()
+                turning_on = False
+        else:
+            self.gamma.disable_pwm_safe()
+        self.settings["pwm_safe"] = turning_on
+        save_settings(self.settings)
+
     def _update_zap_button(self):
         on = self.settings["is_on"]
         self.zap_button.configure(fg_color="#ff5a36" if on else "#2a2a2a")
@@ -138,5 +164,7 @@ class TapZapLiteApp(ctk.CTk):
     def on_close(self):
         """Call this before quitting so the screen doesn't stay tinted."""
         self.gamma.reset()
+        if self.settings["pwm_safe"]:
+            self.gamma.disable_pwm_safe()
         save_settings(self.settings)
         self.destroy()

@@ -36,6 +36,12 @@ A small panel appears with:
 - **Warmth slider** — 0 (screen unchanged) to 1 (blue/green removed, pure red)
 - **Brightness slider** — software dim, 0.15 to 1.0
 - **Three presets** — Reading, Evening, Sleep
+- **PWM-safe mode switch** — locks the built-in display's physical backlight
+  to 100% and restores it on quit, so all dimming happens through the gamma
+  ramp instead of the backlight's own PWM. Only the primary/built-in display
+  is supported (external monitors need DDC/CI, which isn't wired up); if the
+  OS won't grant brightness access the switch snaps back off instead of
+  claiming to be active.
 - **⚡ button** — on/off, screen reverts instantly when off
 - Closing the panel just hides it to the tray icon; use Quit from the tray
   menu to fully exit (this also resets your screen automatically)
@@ -43,14 +49,20 @@ A small panel appears with:
 Settings are saved to `~/.tapzaplite_settings.json` and restored next launch.
 
 ## What's deliberately left out of this version
-Tap Zap's other headline feature is **PWM-safe mode** — locking your physical
-backlight at 100% and dimming in software instead, so the screen's own
-flicker never engages. That requires per-monitor hardware brightness control
-(DDC/CI on Windows, a different macOS API for external displays) and is a
-good "v2" project once this base version feels solid.
+PWM-safe mode only reaches the primary/built-in display. Extending it to
+external monitors needs DDC/CI, which has no built-in OS API on either
+platform — a good "v2" project once this base version feels solid.
 
-Multi-monitor support is also stubbed out but not wired up yet — notes on
-exactly where to add it are inline in `gamma.py`.
+Multi-monitor support for the gamma ramp itself is also stubbed out but not
+wired up yet — notes on exactly where to add it are inline in `gamma.py`.
+
+The macOS side of PWM-safe mode uses `CoreDisplay`, an undocumented private
+framework (the same one tools like the `brightness` CLI rely on, since
+Apple's public IOKit brightness API stopped working for the internal panel
+on Apple Silicon). Private frameworks can move or disappear across macOS
+versions without notice — if that happens, `enable_pwm_safe()` fails closed
+(returns `False`) and the switch in the UI won't turn on, rather than
+silently doing nothing.
 
 ## Packaging into a real .app / .exe
 Once this works from source, use PyInstaller (same tool RedShift's
