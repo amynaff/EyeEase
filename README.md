@@ -64,8 +64,17 @@ versions without notice — if that happens, `enable_pwm_safe()` fails closed
 (returns `False`) and the switch in the UI won't turn on, rather than
 silently doing nothing.
 
-## Packaging into a real .app / .exe
-Once this works from source, use PyInstaller (same tool RedShift's
-`build_release.py` uses) to produce a double-clickable app. Ask me when
-you're ready for that step — it's a separate script, not something to
-bolt on here.
+## Packaging into a real .app (macOS)
+```
+CFLAGS="-Wno-error=default-const-init-var-unsafe" pip3 install pyinstaller
+pyinstaller --noconfirm tapzaplite.spec
+```
+
+Produces `dist/TapZapLite.app`, a double-clickable app with no Dock icon or
+app-switcher entry (`LSUIElement` in the spec's `info_plist`) — it only ever
+shows up as the tray icon, matching how it behaves when run from source.
+`build/` and `dist/` are gitignored; rerun the command above to rebuild
+after code changes.
+
+Packaging for Windows (a `.exe` via the same `pyinstaller` approach) hasn't
+been set up yet — a good next step once this Mac build has seen some use.
