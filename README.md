@@ -11,10 +11,25 @@ bends the green/blue curves downward so those colors get dimmer no matter
 what's on screen, while brightness scales all three curves together as a
 software dim. `gamma.py` has the full explanation inline.
 
+## Setup
+Requires Python 3.9+.
+
+```
+pip3 install -r requirements.txt
+```
+
+On macOS, if this fails while building `pyobjc-core` with a clang error
+about `default-const-init-var-unsafe`, it's a strict-warnings issue between
+that package and newer Xcode toolchains, not a problem with this project.
+Work around it with:
+
+```
+CFLAGS="-Wno-error=default-const-init-var-unsafe" pip3 install -r requirements.txt
+```
+
 ## Run it
 ```
-pip install -r requirements.txt
-python main.py
+python3 main.py
 ```
 
 A small panel appears with:
