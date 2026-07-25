@@ -148,20 +148,30 @@ class GammaController:
     # (root\wmi, WmiMonitorBrightness / WmiMonitorBrightnessMethods) rather
     # than a plain Win32 call. Shelling out to PowerShell avoids adding a
     # WMI client dependency just for this.
+    # Get-WmiObject throwing inside -Command doesn't reliably surface as a
+    # non-zero process exit code, so both calls below wrap the WMI access in
+    # an explicit try/catch and print a sentinel — the only way to tell a
+    # monitor with no WmiMonitorBrightness* support (most external/desktop
+    # monitors) apart from a real success.
     def _get_hw_brightness_windows(self):
         result = subprocess.run(
             [
                 "powershell",
                 "-NoProfile",
                 "-Command",
-                "(Get-WmiObject -Namespace root/wmi "
-                "-Class WmiMonitorBrightness).CurrentBrightness",
+                "try { "
+                "(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightness "
+                "-ErrorAction Stop).CurrentBrightness "
+                "} catch { Write-Output 'FAIL' }",
             ],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        return int(result.stdout.strip()) / 100.0
+        output = result.stdout.strip()
+        if output == "FAIL" or not output:
+            return None
+        return int(output) / 100.0
 
     def _set_hw_brightness_windows(self, level: float) -> bool:
         percent = max(0, min(100, round(level * 100)))
@@ -170,15 +180,18 @@ class GammaController:
                 "powershell",
                 "-NoProfile",
                 "-Command",
+                "try { "
                 "(Get-WmiObject -Namespace root/wmi "
-                "-Class WmiMonitorBrightnessMethods)."
-                f"WmiSetBrightness(1, {percent})",
+                "-Class WmiMonitorBrightnessMethods -ErrorAction Stop)."
+                f"WmiSetBrightness(1, {percent}) | Out-Null; "
+                "Write-Output 'OK' "
+                "} catch { Write-Output 'FAIL' }",
             ],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        return result.returncode == 0
+        return result.stdout.strip() == "OK"
 
     # -- macOS ---------------------------------------------------------
     def _apply_macos(self, red, green, blue):
