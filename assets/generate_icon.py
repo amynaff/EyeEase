@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 ASSETS = Path(__file__).parent
 SIZE = 1024
@@ -29,14 +29,34 @@ def build_icon() -> Image.Image:
     margin = SIZE * 0.06
     draw.ellipse((margin, margin, SIZE - margin, SIZE - margin), fill=ORANGE)
 
-    # A simple lightning-bolt polygon, centered, matching the ⚡ used on the
-    # in-app zap button.
-    bolt = [
-        (0.58, 0.12), (0.34, 0.56), (0.48, 0.56),
-        (0.42, 0.90), (0.68, 0.44), (0.53, 0.44),
-    ]
-    points = [(x * SIZE, y * SIZE) for x, y in bolt]
-    draw.polygon(points, fill=WHITE)
+    # An almond-shaped eye: two circles overlapped and clipped to a lens,
+    # standing in for the app's focus on eye comfort/ease.
+    cx, cy = SIZE * 0.5, SIZE * 0.5
+    lens_r = SIZE * 0.42
+    offset = SIZE * 0.27
+
+    left = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(left).ellipse(
+        (cx - offset - lens_r, cy - lens_r, cx - offset + lens_r, cy + lens_r),
+        fill=255,
+    )
+    right = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(right).ellipse(
+        (cx + offset - lens_r, cy - lens_r, cx + offset + lens_r, cy + lens_r),
+        fill=255,
+    )
+    lens = ImageChops.darker(left, right)
+
+    img.paste(Image.new("RGBA", (SIZE, SIZE), WHITE), (0, 0), lens)
+
+    iris_r = SIZE * 0.11
+    draw.ellipse(
+        (cx - iris_r, cy - iris_r, cx + iris_r, cy + iris_r), fill=ORANGE
+    )
+    pupil_r = SIZE * 0.05
+    draw.ellipse(
+        (cx - pupil_r, cy - pupil_r, cx + pupil_r, cy + pupil_r), fill=WHITE
+    )
 
     return img
 

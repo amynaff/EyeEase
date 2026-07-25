@@ -65,7 +65,7 @@ class EyeEaseApp(ctk.CTk):
         header.pack(fill="x", padx=20, pady=(20, 10))
 
         ctk.CTkLabel(
-            header, text="TAP ZAP LITE", font=ctk.CTkFont(size=14, weight="bold")
+            header, text="EYEEASE", font=ctk.CTkFont(size=14, weight="bold")
         ).pack(side="left")
 
         self.zap_button = ctk.CTkButton(
