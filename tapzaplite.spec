@@ -4,7 +4,7 @@ a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[("assets/icon.png", "assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -45,7 +45,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="TapZapLite.app",
-    icon=None,
+    icon="assets/icon.icns",
     bundle_identifier="com.tapzaplite.app",
     info_plist={
         # Menu-bar-only utility: no Dock icon, no app switcher entry.

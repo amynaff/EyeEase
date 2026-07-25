@@ -4,12 +4,26 @@ shows/hides the control panel, matching how RedShift and Tap Zap both live
 in the tray rather than the dock/taskbar.
 """
 
+import os
+import sys
+
 from PIL import Image, ImageDraw
 import pystray
 
 
+def _assets_dir():
+    # PyInstaller unpacks bundled data next to sys._MEIPASS at runtime;
+    # when running from source it's just the folder next to this file.
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "assets")
+
+
 def make_icon_image():
-    """Draws a simple orange circle — swap this for a real .png/.ico later."""
+    """Loads the app's icon.png; falls back to a plain circle if missing."""
+    icon_path = os.path.join(_assets_dir(), "icon.png")
+    if os.path.exists(icon_path):
+        return Image.open(icon_path)
+
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     draw.ellipse((8, 8, 56, 56), fill=(255, 90, 54, 255))
