@@ -76,5 +76,20 @@ shows up as the tray icon, matching how it behaves when run from source.
 `build/` and `dist/` are gitignored; rerun the command above to rebuild
 after code changes.
 
-Packaging for Windows (a `.exe` via the same `pyinstaller` approach) hasn't
-been set up yet — a good next step once this Mac build has seen some use.
+## Packaging into a real .exe (Windows)
+```
+pip install -r requirements.txt pyinstaller
+pyinstaller --noconfirm tapzaplite-windows.spec
+```
+
+Produces `dist/TapZapLite.exe`, a single portable executable with no
+console window. Must be run with PyInstaller *on Windows* — PyInstaller
+can't cross-compile, and the spec deliberately refuses to run on any other
+OS rather than silently producing a same-platform binary with the wrong
+name (which is what a plain PyInstaller run would otherwise do).
+
+This spec is untested on real Windows — there's no Windows machine in the
+environment this was built in. The macOS `.app` above went through a full
+verification pass (launched, tray icon clicked, panel shown, quit
+confirmed); treat the Windows build as a starting point that needs the
+same pass on real hardware before you'd trust it.
