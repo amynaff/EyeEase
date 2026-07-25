@@ -85,7 +85,21 @@ class GammaController:
         if current is None:
             return False
         self._saved_hw_brightness = current
-        return self._set_hw_brightness(1.0)
+        if not self._set_hw_brightness(1.0):
+            self._saved_hw_brightness = None
+            return False
+
+        # The macOS write call can report success (no exception) while
+        # silently doing nothing — observed when calling it from a script
+        # in a restricted/sandboxed execution context; confirmed working
+        # in a normal `python3 main.py` run. If brightness wasn't already
+        # ~100%, confirm it actually moved before trusting the call.
+        if current < 0.98:
+            after = self._get_hw_brightness()
+            if after is None or after < 0.98:
+                self._saved_hw_brightness = None
+                return False
+        return True
 
     def disable_pwm_safe(self):
         """Restores the physical backlight to whatever it was before
@@ -119,9 +133,19 @@ class GammaController:
     # panel on both Intel and Apple Silicon Macs (IOKit's public API stopped
     # working for internal displays on Apple Silicon).
     def _core_display(self):
-        return ctypes.CDLL(
-            "/System/Library/PrivateFrameworks/CoreDisplay.framework/CoreDisplay"
-        )
+        # CoreDisplay was promoted from PrivateFrameworks to Frameworks at
+        # some point (confirmed present as a public framework on macOS
+        # 26.5.2) — try both, oldest path last so newer systems resolve
+        # fastest.
+        for path in (
+            "/System/Library/Frameworks/CoreDisplay.framework/CoreDisplay",
+            "/System/Library/PrivateFrameworks/CoreDisplay.framework/CoreDisplay",
+        ):
+            try:
+                return ctypes.CDLL(path)
+            except OSError:
+                continue
+        raise OSError("CoreDisplay framework not found")
 
     def _main_display_id(self):
         cg = ctypes.CDLL(
