@@ -1,6 +1,6 @@
 """
-app_ui.py — the floating panel: two vertical sliders, three presets, one ZAP
-button.
+app_ui.py — the floating panel: two vertical sliders, three presets, one
+EASE button.
 
 Uses customtkinter so it looks modern (rounded corners, dark theme) without
 pulling in something heavy like Electron.
@@ -22,17 +22,22 @@ from gamma import (
     kelvin_to_hex,
 )
 from auto_schedule import Schedule, parse_hhmm
+import brand
 
 SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
-# -- palette ------------------------------------------------------------
-BG = "#0d0d0f"
-SURFACE = "#17171b"
-SURFACE_HI = "#232329"
-ACCENT = "#ff5a36"
-ACCENT_DIM = "#7a2b1a"
-TEXT = "#f2f2f4"
-TEXT_MUTED = "#8a8a94"
+# Palette comes from brand.py so the panel, tray icon and app icon can't
+# drift apart. ACCENT/ACCENT_DIM are kept as local names because they read
+# better at the call sites than AMBER/AMBER_DIM do.
+ACCENT = brand.AMBER
+ACCENT_HOVER = brand.AMBER_BRIGHT
+ACCENT_DIM = brand.AMBER_DIM
+INK = brand.INK
+BG = brand.BG
+SURFACE = brand.SURFACE
+SURFACE_HI = brand.SURFACE_HI
+TEXT = brand.TEXT
+TEXT_MUTED = brand.TEXT_MUTED
 
 # Presets are written in Kelvin because that's the unit people actually
 # reason about ("2700K is a warm bulb"), then converted to slider intensity.
@@ -116,7 +121,7 @@ class EyeEaseApp(ctk.CTk):
         self.title("EyeEase")
         # Tall enough for every row to fit without pack() squeezing the last
         # widgets — the panel has no scroll, so an overflow silently clips the
-        # ZAP button right off the bottom.
+        # EASE button right off the bottom.
         self.geometry("360x716")
         self.resizable(False, False)
         self.configure(fg_color=BG)
@@ -140,7 +145,7 @@ class EyeEaseApp(ctk.CTk):
         self._build_presets()
         self._build_schedule_row()
         self._build_pwm_row()
-        self._build_zap_button()
+        self._build_power_button()
         self._refresh_readouts()
         self._update_power_state()
         self._update_schedule_row()
@@ -352,19 +357,37 @@ class EyeEaseApp(ctk.CTk):
         )
         self.pwm_note.pack(side="right", padx=14)
 
-    def _build_zap_button(self):
-        self.zap_button = ctk.CTkButton(
+    def _build_power_button(self):
+        # Two pre-rendered marks rather than one recoloured on the fly: the
+        # iris is punched in the button's own colour, so the "off" mark has
+        # to be drawn against the off background to stay an eye and not a
+        # blob. Both are held on self because CTkImage doesn't keep the
+        # underlying PIL image alive on its own.
+        self.eye_mark_on = ctk.CTkImage(
+            light_image=brand.eye_image(22, brand.INK, ACCENT),
+            dark_image=brand.eye_image(22, brand.INK, ACCENT),
+            size=(22, 22),
+        )
+        self.eye_mark_off = ctk.CTkImage(
+            light_image=brand.eye_image(22, TEXT_MUTED, SURFACE_HI),
+            dark_image=brand.eye_image(22, TEXT_MUTED, SURFACE_HI),
+            size=(22, 22),
+        )
+
+        self.power_button = ctk.CTkButton(
             self,
-            text="⚡  ZAP",
+            text="EASE ON",
+            image=self.eye_mark_on,
+            compound="left",
             height=54,
             corner_radius=14,
             font=ctk.CTkFont(size=17, weight="bold"),
             fg_color=ACCENT,
-            hover_color="#ff734f",
-            text_color="#120704",
+            hover_color=ACCENT_HOVER,
+            text_color=INK,
             command=self._toggle_on_off,
         )
-        self.zap_button.pack(fill="x", padx=22, pady=(0, 22))
+        self.power_button.pack(fill="x", padx=22, pady=(0, 22))
 
     # -- interaction -----------------------------------------------------
     def _on_slider_change(self):
@@ -607,11 +630,12 @@ class EyeEaseApp(ctk.CTk):
 
     def _update_power_state(self):
         on = self.settings["is_on"]
-        self.zap_button.configure(
-            text="⚡  ZAP" if on else "⚡  ZAPPED OFF",
+        self.power_button.configure(
+            text="EASE ON" if on else "EASE OFF",
+            image=self.eye_mark_on if on else self.eye_mark_off,
             fg_color=ACCENT if on else SURFACE_HI,
-            text_color="#120704" if on else TEXT_MUTED,
-            hover_color="#ff734f" if on else SURFACE_HI,
+            text_color=INK if on else TEXT_MUTED,
+            hover_color=ACCENT_HOVER if on else SURFACE_HI,
         )
         self.status_dot.configure(text_color=ACCENT if on else ACCENT_DIM)
 

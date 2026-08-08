@@ -10,6 +10,8 @@ import sys
 from PIL import Image, ImageDraw
 import pystray
 
+from brand import AMBER, hex_to_rgba
+
 
 def _assets_dir():
     # PyInstaller unpacks bundled data next to sys._MEIPASS at runtime;
@@ -26,7 +28,7 @@ def make_icon_image():
 
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.ellipse((8, 8, 56, 56), fill=(255, 90, 54, 255))
+    draw.ellipse((8, 8, 56, 56), fill=hex_to_rgba(AMBER))
     return img
 
 

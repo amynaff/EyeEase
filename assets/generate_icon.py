@@ -11,14 +11,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageDraw
 
 ASSETS = Path(__file__).parent
+# This script lives in assets/, so the repo root isn't on sys.path when it's
+# run directly — add it so the shared brand definitions can be imported.
+sys.path.insert(0, str(ASSETS.parent))
+
+from brand import AMBER, eye_lens_mask, hex_to_rgba  # noqa: E402
+
 SIZE = 1024
 
-# Same orange as the zap button in app_ui.py, so the app icon, tray icon,
-# and in-app button all read as the same brand.
-ORANGE = (255, 90, 54, 255)
+# Colour and eye shape both come from brand.py, so the app icon, tray icon
+# and in-panel button are guaranteed to be the same mark in the same amber.
+AMBER_RGBA = hex_to_rgba(AMBER)
 WHITE = (255, 255, 255, 255)
 
 
@@ -27,31 +33,18 @@ def build_icon() -> Image.Image:
     draw = ImageDraw.Draw(img)
 
     margin = SIZE * 0.06
-    draw.ellipse((margin, margin, SIZE - margin, SIZE - margin), fill=ORANGE)
+    draw.ellipse((margin, margin, SIZE - margin, SIZE - margin), fill=AMBER_RGBA)
 
-    # An almond-shaped eye: two circles overlapped and clipped to a lens,
+    # The almond eye — same mask the in-panel button glyph is built from,
     # standing in for the app's focus on eye comfort/ease.
     cx, cy = SIZE * 0.5, SIZE * 0.5
-    lens_r = SIZE * 0.42
-    offset = SIZE * 0.27
-
-    left = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(left).ellipse(
-        (cx - offset - lens_r, cy - lens_r, cx - offset + lens_r, cy + lens_r),
-        fill=255,
-    )
-    right = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(right).ellipse(
-        (cx + offset - lens_r, cy - lens_r, cx + offset + lens_r, cy + lens_r),
-        fill=255,
-    )
-    lens = ImageChops.darker(left, right)
+    lens = eye_lens_mask(SIZE)
 
     img.paste(Image.new("RGBA", (SIZE, SIZE), WHITE), (0, 0), lens)
 
     iris_r = SIZE * 0.11
     draw.ellipse(
-        (cx - iris_r, cy - iris_r, cx + iris_r, cy + iris_r), fill=ORANGE
+        (cx - iris_r, cy - iris_r, cx + iris_r, cy + iris_r), fill=AMBER_RGBA
     )
     pupil_r = SIZE * 0.05
     draw.ellipse(

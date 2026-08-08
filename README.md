@@ -1,8 +1,13 @@
 # EyeEase
 
-Free, minimal blue-light blocker for Mac and Windows — same idea as RedShift
-(gamma-table manipulation), styled after Tap Zap: two sliders, three presets,
-one ZAP button, lives in the tray.
+Free, minimal blue-light blocker for Mac and Windows — same underlying idea
+as RedShift (gamma-table manipulation): two sliders, three presets, one EASE
+button, an auto schedule, and it lives in the tray.
+
+The palette is amber, not an alarm red, because amber is what the app itself
+produces at evening temperatures — the brand is the colour the product makes.
+The mark is an eye, defined once in `brand.py` and shared by the app icon,
+the tray icon and the in-panel button.
 
 ## How it works, in one paragraph
 Every screen redraws pixels through a "gamma ramp" — a lookup table that maps
@@ -66,14 +71,14 @@ A small panel appears with:
   While it's on, the sliders mean "what I want at *night*": the screen sits
   neutral during the day and slides toward those values across the fade, and
   the status line says which of those is happening right now. Presets still
-  work — they move the night target. The ZAP button still wins outright.
+  work — they move the night target. The EASE button still wins outright.
 - **PWM-safe mode switch** — locks the built-in display's physical backlight
   to 100% and restores it on quit, so all dimming happens through the gamma
   ramp instead of the backlight's own PWM. Only the primary/built-in display
   is supported (external monitors need DDC/CI, which isn't wired up); if the
   OS won't grant brightness access the switch snaps back off instead of
   claiming to be active.
-- **ZAP button** — on/off. Switching off eases the screen back to normal but
+- **EASE button** — on/off. Switching off eases the screen back to normal but
   leaves the sliders where you set them, so switching back on returns to the
   same place. Preset changes and on/off ease over ~0.4s; dragging a slider
   applies instantly, since animating a drag just reads as input lag
