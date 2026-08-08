@@ -36,7 +36,10 @@ def run_tray(app):
     """app is the EyeEaseApp instance (a customtkinter window)."""
 
     def on_show(icon, item):
-        app.after(0, app.deiconify)
+        # show_panel() rather than deiconify(): the panel is borderless, and
+        # restoring one without raising it looks exactly like a click that
+        # did nothing.
+        app.after(0, app.show_panel)
 
     def on_quit(icon, item):
         icon.stop()

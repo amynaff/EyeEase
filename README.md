@@ -82,8 +82,11 @@ A small panel appears with:
   leaves the sliders where you set them, so switching back on returns to the
   same place. Preset changes and on/off ease over ~0.4s; dragging a slider
   applies instantly, since animating a drag just reads as input lag
-- Closing the panel just hides it to the tray icon; use Quit from the tray
-  menu to fully exit (this also resets your screen automatically)
+- The panel has no OS title bar — drag it by its header, and use the ✕ to
+  hide it back to the tray. macOS draws the rounded corners and drop shadow
+  on a borderless window itself, so none of that is faked in the app.
+- Hiding the panel only hides it; use Quit from the tray menu to fully exit
+  (this also resets your screen automatically)
 
 Settings are saved to `~/.eyeease_settings.json` (debounced, so a slider drag
 is one write rather than dozens) and restored next launch. Settings files
@@ -121,6 +124,15 @@ platform — a good "v2" project once this base version feels solid.
 
 Multi-monitor support for the gamma ramp itself is also stubbed out but not
 wired up yet — notes on exactly where to add it are inline in `gamma.py`.
+
+The borderless panel is done with `overrideredirect()`, which on macOS has to
+be applied *after* the window has been mapped — calling it during setup
+leaves a window that reports a perfectly sensible geometry and is simply
+never drawn. `_strip_chrome()` defers it and re-asserts position afterwards.
+Tk's `::tk::unsupported::MacWindowStyle` is the other documented route; it
+reports success on current macOS and leaves the title bar in place, so it
+isn't used. If `overrideredirect()` ever fails the app keeps its title bar
+rather than refusing to start.
 
 The macOS side of PWM-safe mode uses `CoreDisplay`, an undocumented private
 framework (the same one tools like the `brightness` CLI rely on, since

@@ -118,11 +118,18 @@ class EyeEaseApp(ctk.CTk):
         self._save_job = None
         self._tick_job = None
 
+        # Window position is tracked by hand because a borderless window has
+        # to be re-positioned after overrideredirect(), and dragging it is
+        # our job rather than the window manager's.
+        self._window_x, self._window_y = 120, 90
+        self._drag_offset = None
+        self._chrome_stripped = False
+
         self.title("EyeEase")
         # Tall enough for every row to fit without pack() squeezing the last
         # widgets — the panel has no scroll, so an overflow silently clips the
         # EASE button right off the bottom.
-        self.geometry("360x716")
+        self.geometry(f"360x716+{self._window_x}+{self._window_y}")
         self.resizable(False, False)
         self.configure(fg_color=BG)
         self.attributes("-topmost", True)  # small utility window stays on top
@@ -136,6 +143,63 @@ class EyeEaseApp(ctk.CTk):
                 self.pwm_switch.deselect()
         self._apply_current()
         self._start_ticking()
+        # Deferred so the window is mapped first — see _strip_chrome().
+        self.after(80, self._strip_chrome)
+
+    # -- window chrome ---------------------------------------------------
+    def _strip_chrome(self):
+        """Drop the OS title bar, leaving a bare floating panel.
+
+        Has to run *after* the window has been mapped: calling
+        overrideredirect() before the first draw leaves macOS with a window
+        it never puts on screen — it reports a sensible geometry and simply
+        isn't visible. Re-asserting geometry and re-mapping afterwards is
+        what makes it appear.
+
+        macOS draws rounded corners and a drop shadow on the result by
+        itself, so nothing here has to fake them.
+        """
+        try:
+            self.overrideredirect(True)
+        except Exception:
+            # Not worth failing the whole app over cosmetics — a title bar is
+            # a perfectly usable fallback.
+            self._chrome_stripped = False
+            return
+
+        self.geometry(f"+{self._window_x}+{self._window_y}")
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
+        self._chrome_stripped = True
+
+    def _make_draggable(self, widget):
+        widget.bind("<Button-1>", self._drag_start)
+        widget.bind("<B1-Motion>", self._drag_move)
+
+    def _drag_start(self, event):
+        self._drag_offset = (
+            event.x_root - self.winfo_x(),
+            event.y_root - self.winfo_y(),
+        )
+
+    def _drag_move(self, event):
+        if self._drag_offset is None:
+            return
+        self._window_x = event.x_root - self._drag_offset[0]
+        self._window_y = event.y_root - self._drag_offset[1]
+        self.geometry(f"+{self._window_x}+{self._window_y}")
+
+    def show_panel(self):
+        """Bring the panel back from the tray.
+
+        deiconify() alone can restore a borderless window without raising it,
+        which looks identical to the app ignoring the tray click, so lift and
+        re-assert topmost too.
+        """
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
 
     # -- construction ----------------------------------------------------
     def _build_ui(self):
@@ -151,8 +215,10 @@ class EyeEaseApp(ctk.CTk):
         self._update_schedule_row()
 
     def _build_header(self):
+        """The header doubles as the title bar: it's the drag handle, and it
+        carries the only close affordance now that the OS one is gone."""
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=22, pady=(20, 16))
+        header.pack(fill="x", padx=22, pady=(18, 16))
 
         wordmark = ctk.CTkFrame(header, fg_color="transparent")
         wordmark.pack(side="left")
@@ -169,10 +235,32 @@ class EyeEaseApp(ctk.CTk):
             text_color=ACCENT,
         ).pack(side="left")
 
+        # Hides to the tray rather than quitting, matching what the OS close
+        # button did before — Quit lives in the tray menu, and only Quit puts
+        # the screen back to normal.
+        self.close_button = ctk.CTkButton(
+            header,
+            text="✕",
+            width=26,
+            height=26,
+            corner_radius=13,
+            font=ctk.CTkFont(size=13),
+            fg_color="transparent",
+            hover_color=SURFACE_HI,
+            text_color=TEXT_MUTED,
+            command=self.withdraw,
+        )
+        self.close_button.pack(side="right")
+
         self.status_dot = ctk.CTkLabel(
             header, text="●", font=ctk.CTkFont(size=13), text_color=ACCENT
         )
-        self.status_dot.pack(side="right")
+        self.status_dot.pack(side="right", padx=(0, 10))
+
+        # Everything in the header drags the window except the close button.
+        self._make_draggable(header)
+        self._make_draggable(wordmark)
+        self._make_draggable(self.status_dot)
 
     def _build_sliders(self):
         row = ctk.CTkFrame(self, fg_color="transparent")
