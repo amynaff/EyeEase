@@ -221,3 +221,47 @@ environment this was built in. The macOS `.app` above went through a full
 verification pass (launched, tray icon clicked, panel shown, quit
 confirmed); treat the Windows build as a starting point that needs the
 same pass on real hardware before you'd trust it.
+
+### The one Windows thing most likely to bite
+Windows sanity-checks gamma ramps and refuses any it considers too far from
+linear. The warmest settings here drive blue to zero across the entire ramp,
+which is exactly the shape it objects to, so **the deep end of the warmth
+slider may do nothing on a stock Windows install** while the mild end works
+fine.
+
+`SetDeviceGammaRamp` reports this by returning false rather than raising, so
+the refusal is completely silent unless you check — which is why `apply()`
+now returns a bool and the panel shows "your system refused the colour
+change" rather than leaving you with a slider that moves and a screen that
+doesn't.
+
+The documented fix is a machine-wide registry value that widens the allowed
+range (Redshift and f.lux both depend on it):
+
+```
+HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange = 256  (DWORD)
+```
+
+This app deliberately does not write it. It needs admin rights, it affects
+every program on the machine, and silently changing a system-wide graphics
+setting is not something a screen dimmer should do behind your back.
+
+### What to check on a real Windows machine
+None of the below has ever been run. In rough order of how likely it is to
+be broken:
+
+1. **Warmth at the deep end** — drag to the warmest setting. If the screen
+   doesn't change and the panel shows the refusal message, that's the gamma
+   range limit above, not a crash.
+2. **PWM-safe mode** — Windows exposes only the discrete brightness levels a
+   panel supports, so the writability probe checks the backlight *moved*
+   rather than landed exactly where asked. Watch for it wrongly reporting
+   "can't control this backlight" on a laptop where the brightness keys work.
+3. **Launch at login** — should add a value under
+   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Check the app
+   actually starts after a reboot, not just that the value exists.
+4. **The borderless panel** — `overrideredirect()` behaves differently on
+   Windows; if the panel can't be dragged or won't come back from the tray,
+   that's the place to look.
+5. **Desktop/external monitors** — `WmiMonitorBrightness` generally doesn't
+   exist for them, so PWM-safe should decline rather than error.

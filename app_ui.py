@@ -137,6 +137,7 @@ class EyeEaseApp(ctk.CTk):
         self._window_x, self._window_y = 120, 90
         self._drag_offset = None
         self._chrome_stripped = False
+        self._gamma_failed = False
 
         self.title("EyeEase")
         self.geometry(f"{PANEL_WIDTH}x600+{self._window_x}+{self._window_y}")
@@ -647,6 +648,16 @@ class EyeEaseApp(ctk.CTk):
         )
         self.power_button.pack(fill="x", padx=22, pady=(0, 22))
 
+        # Not packed until something actually fails, so it costs no space in
+        # the normal case — _fit_to_content() resizes the panel around it.
+        self.gamma_warning = ctk.CTkLabel(
+            self,
+            text="Your system refused the colour change — see README",
+            font=ctk.CTkFont(size=10),
+            text_color=TEXT_MUTED,
+            wraplength=PANEL_WIDTH - 60,
+        )
+
     # -- interaction -----------------------------------------------------
     def _on_slider_change(self):
         self.settings["intensity"] = self.warmth_slider.get()
@@ -937,11 +948,31 @@ class EyeEaseApp(ctk.CTk):
     def _apply_current(self):
         if self.settings["is_on"]:
             intensity, brightness = self._effective_values()
-            self.gamma.apply(intensity_to_kelvin(intensity), brightness)
+            applied = self.gamma.apply(intensity_to_kelvin(intensity), brightness)
         else:
-            self.gamma.reset()
+            applied = self.gamma.reset()
+        self._show_gamma_warning(not applied)
         self._refresh_readouts()
         self._queue_save()
+
+    def _show_gamma_warning(self, failed):
+        """Say so when the OS refuses the colour change.
+
+        Windows sanity-checks gamma ramps and rejects ones too far from
+        linear, which is precisely the shape the warmest settings produce.
+        Without this the sliders would move, the readout would update, and
+        the screen would stay stubbornly unchanged with nothing explaining
+        why.
+        """
+        if failed == self._gamma_failed:
+            return
+        self._gamma_failed = failed
+
+        if failed:
+            self.gamma_warning.pack(fill="x", padx=22, pady=(0, 16))
+        else:
+            self.gamma_warning.pack_forget()
+        self._fit_to_content()
 
     def on_close(self):
         """Call this before quitting so the screen doesn't stay tinted."""

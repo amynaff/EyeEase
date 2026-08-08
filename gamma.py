@@ -47,7 +47,6 @@ KELVIN_MAX = 6500
 # drive it at all. Big enough to read back reliably, small enough that the
 # momentary blip isn't worth noticing.
 PWM_PROBE_DELTA = 0.05
-PWM_PROBE_TOLERANCE = 0.02
 
 
 def _planckian(kelvin: float):
@@ -144,18 +143,24 @@ class GammaController:
         self.system = platform.system()  # 'Darwin', 'Windows', 'Linux'
         self._saved_hw_brightness = None  # set while PWM-safe mode is active
 
-    def apply(self, kelvin: float, brightness: float):
+    def apply(self, kelvin: float, brightness: float) -> bool:
+        """Push a ramp to the display. Returns False if the OS refused it.
+
+        Both platforms report failure through a return value rather than an
+        exception, and both were previously discarded — so a rejected ramp
+        was indistinguishable from a successful one, and the screen just
+        never changed.
+        """
         red, green, blue = build_ramp(kelvin, brightness)
         if self.system == "Darwin":
-            self._apply_macos(red, green, blue)
-        elif self.system == "Windows":
-            self._apply_windows(red, green, blue)
-        else:
-            raise RuntimeError(f"Unsupported platform: {self.system}")
+            return self._apply_macos(red, green, blue)
+        if self.system == "Windows":
+            return self._apply_windows(red, green, blue)
+        raise RuntimeError(f"Unsupported platform: {self.system}")
 
-    def reset(self):
+    def reset(self) -> bool:
         """Restore a normal, unmodified screen."""
-        self.apply(kelvin=KELVIN_NEUTRAL, brightness=1.0)
+        return self.apply(kelvin=KELVIN_NEUTRAL, brightness=1.0)
 
     # -- PWM-safe mode ---------------------------------------------------
     # The "brightness" slider above only ever dims via the gamma ramp — it
@@ -191,7 +196,14 @@ class GammaController:
 
         self._set_hw_brightness(probe)
         seen = self._get_hw_brightness()
-        moved = seen is not None and abs(seen - probe) < PWM_PROBE_TOLERANCE
+
+        # Ask "did it move?", not "did it land exactly on the probe?".
+        # Windows exposes only the discrete brightness levels a panel
+        # actually supports, so a 5% request can settle on the nearest
+        # supported step instead of the exact value — and demanding an exact
+        # match would report a perfectly controllable display as
+        # uncontrollable.
+        moved = seen is not None and abs(seen - current) >= PWM_PROBE_DELTA / 2
 
         # Put it back whatever the answer — the probe is a test, not a change.
         self._set_hw_brightness(current)
@@ -362,7 +374,7 @@ class GammaController:
         return result.stdout.strip() == "OK"
 
     # -- macOS ---------------------------------------------------------
-    def _apply_macos(self, red, green, blue):
+    def _apply_macos(self, red, green, blue) -> bool:
         # CoreGraphics: CGSetDisplayTransferByTable takes float arrays (0.0-1.0)
         cg = ctypes.CDLL(
             "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
@@ -373,15 +385,17 @@ class GammaController:
         b = FloatArray(*[v / 65535 for v in blue])
 
         main_display = cg.CGMainDisplayID()
-        cg.CGSetDisplayTransferByTable(
+        # Returns a CGError; 0 is success. Checked for the same reason as the
+        # Windows call — a refusal here is otherwise silent.
+        return cg.CGSetDisplayTransferByTable(
             main_display, RAMP_SIZE, r, g, b
-        )
+        ) == 0
         # NOTE: for multi-monitor support, loop over CGGetActiveDisplayList()
         # and call CGSetDisplayTransferByTable for each display id — left as
         # a next step, see README.
 
     # -- Windows ---------------------------------------------------------
-    def _apply_windows(self, red, green, blue):
+    def _apply_windows(self, red, green, blue) -> bool:
         # GDI: SetDeviceGammaRamp wants a single WORD[3][256] buffer
         WORD = ctypes.c_ushort
         RampType = (WORD * RAMP_SIZE) * 3
@@ -392,8 +406,25 @@ class GammaController:
             ramp[2][i] = blue[i]
 
         hdc = ctypes.windll.user32.GetDC(0)
-        ctypes.windll.gdi32.SetDeviceGammaRamp(hdc, ctypes.byref(ramp))
-        ctypes.windll.user32.ReleaseDC(0, hdc)
+        if not hdc:
+            return False
+        try:
+            # This return value matters. Windows sanity-checks gamma ramps and
+            # refuses ones it considers too far from linear — the deepest
+            # settings here drive blue to zero across the whole ramp, which is
+            # exactly the shape it objects to. Ignoring the result meant a
+            # refusal looked identical to success: no error, no exception, and
+            # a screen that simply never changed.
+            #
+            # The documented escape hatch is a machine-wide registry value,
+            # HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM
+            # \GdiIcmGammaRange = 256 (Redshift and f.lux both rely on it).
+            # This app does not write it — that's a system-wide change and the
+            # user's call — so the UI reports the refusal instead.
+            applied = bool(ctypes.windll.gdi32.SetDeviceGammaRamp(hdc, ctypes.byref(ramp)))
+        finally:
+            ctypes.windll.user32.ReleaseDC(0, hdc)
+        return applied
         # NOTE: for multi-monitor support, call EnumDisplayMonitors and get a
         # device context per monitor instead of the single GetDC(0) — RedShift
         # already does this, worth porting over as a next step.
