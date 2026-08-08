@@ -152,6 +152,7 @@ class EyeEaseApp(ctk.CTk):
             if not self.gamma.enable_pwm_safe():
                 self.settings["pwm_safe"] = False
                 self.pwm_switch.deselect()
+                self.pwm_note.configure(text="can't control this backlight")
         self._apply_current()
         self._start_ticking()
         # Deferred so the window is mapped first — see _strip_chrome().
@@ -228,7 +229,6 @@ class EyeEaseApp(ctk.CTk):
     def _build_ui(self):
         self._build_header()
         self._build_sliders()
-        self._build_swatch()
         self._build_presets()
         self._build_schedule_row()
         self._build_options_card()
@@ -333,23 +333,6 @@ class EyeEaseApp(ctk.CTk):
         readout.pack(pady=(12, 16))
 
         return slider, readout
-
-    def _build_swatch(self):
-        """A thin strip showing the colour a white pixel will actually become,
-        so the sliders preview themselves without the user hunting for a
-        white window to look at."""
-        wrap = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
-        wrap.pack(fill="x", padx=22, pady=(0, 14))
-
-        ctk.CTkLabel(
-            wrap,
-            text="PREVIEW",
-            font=ctk.CTkFont(size=10, weight="bold"),
-            text_color=TEXT_MUTED,
-        ).pack(pady=(12, 8))
-
-        self.swatch = ctk.CTkFrame(wrap, height=26, corner_radius=8, fg_color="#ffffff")
-        self.swatch.pack(fill="x", padx=14, pady=(0, 14))
 
     def _build_presets(self):
         row = ctk.CTkFrame(self, fg_color="transparent")
@@ -782,6 +765,7 @@ class EyeEaseApp(ctk.CTk):
                 self._update_schedule_row()
                 if self._anim_job is None:
                     self._apply_current()
+            self._hold_pwm_safe()
 
         self._tick_job = self.after(TICK_MS, tick)
 
@@ -809,6 +793,19 @@ class EyeEaseApp(ctk.CTk):
         # there toward whatever the sliders say.
         return (intensity * fraction, 1.0 - (1.0 - brightness) * fraction)
 
+    def _hold_pwm_safe(self):
+        """Keep the backlight pinned while the mode is on, and stop claiming
+        the mode if the backlight slips out of our control."""
+        if not self.settings["pwm_safe"]:
+            return
+        if self.gamma.hold_pwm_safe():
+            return
+
+        self.settings["pwm_safe"] = False
+        self.pwm_switch.deselect()
+        self.pwm_note.configure(text="lost control of backlight")
+        self._queue_save()
+
     def _toggle_pwm_safe(self):
         turning_on = self.pwm_switch.get() == 1
         if turning_on:
@@ -817,7 +814,7 @@ class EyeEaseApp(ctk.CTk):
                 # permission, etc.) — leave the switch off instead of
                 # claiming a mode that isn't actually active.
                 self.pwm_switch.deselect()
-                self.pwm_note.configure(text="unavailable on this display")
+                self.pwm_note.configure(text="can't control this backlight")
                 turning_on = False
             else:
                 self.pwm_note.configure(text="backlight locked 100%")
@@ -886,12 +883,15 @@ class EyeEaseApp(ctk.CTk):
             brightness = self.brightness_slider.get()
 
         kelvin = intensity_to_kelvin(intensity)
-        self.warmth_readout.configure(text=f"{int(round(kelvin / 50) * 50)}K")
+        self.warmth_readout.configure(
+            text=f"{int(round(kelvin / 50) * 50)}K",
+            # The number is drawn in the tint it describes, which is the whole
+            # preview: no separate swatch, no label, nothing extra on screen.
+            # Tint only, never the dimming — a readout that fades toward black
+            # at low brightness would be unreadable rather than informative.
+            text_color=kelvin_to_hex(kelvin),
+        )
         self.brightness_readout.configure(text=f"{int(round(brightness * 100))}%")
-
-        # The swatch shows the tint only — not the dimming — because a strip
-        # that goes near-black at low brightness stops communicating colour.
-        self.swatch.configure(fg_color=kelvin_to_hex(kelvin))
 
         self._update_preset_highlight(kelvin, brightness)
 
