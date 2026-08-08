@@ -21,6 +21,7 @@ from gamma import (
     KELVIN_MIN,
     kelvin_to_hex,
 )
+from auto_schedule import Schedule, parse_hhmm
 
 SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
@@ -47,6 +48,11 @@ PRESETS = {
 TRANSITION_MS = 380
 TRANSITION_STEPS = 16
 
+# How often the auto schedule re-checks the clock. The fade lasts tens of
+# minutes, so a 30s tick is far finer than the eye can follow — the point is
+# just to never be visibly behind.
+TICK_MS = 30_000
+
 
 def intensity_to_kelvin(intensity: float) -> float:
     """Slider position (0.0-1.0, up = warmer) -> colour temperature."""
@@ -61,7 +67,14 @@ def kelvin_to_intensity(kelvin: float) -> float:
 
 
 def load_settings():
-    defaults = {"intensity": 0.6, "brightness": 0.8, "is_on": True, "pwm_safe": False}
+    defaults = {
+        "intensity": 0.6,
+        "brightness": 0.8,
+        "is_on": True,
+        "pwm_safe": False,
+        "auto": False,
+        "schedule": Schedule().to_dict(),
+    }
     if os.path.exists(SETTINGS_PATH):
         try:
             with open(SETTINGS_PATH) as f:
@@ -91,18 +104,20 @@ class EyeEaseApp(ctk.CTk):
 
         self.gamma = GammaController()
         self.settings = load_settings()
+        self.schedule = Schedule.from_dict(self.settings["schedule"])
 
         # Handles for pending after() callbacks so they can be cancelled on
         # close — otherwise a transition mid-flight fires against a destroyed
         # window and throws.
         self._anim_job = None
         self._save_job = None
+        self._tick_job = None
 
         self.title("EyeEase")
         # Tall enough for every row to fit without pack() squeezing the last
         # widgets — the panel has no scroll, so an overflow silently clips the
         # ZAP button right off the bottom.
-        self.geometry("360x624")
+        self.geometry("360x716")
         self.resizable(False, False)
         self.configure(fg_color=BG)
         self.attributes("-topmost", True)  # small utility window stays on top
@@ -115,6 +130,7 @@ class EyeEaseApp(ctk.CTk):
                 self.settings["pwm_safe"] = False
                 self.pwm_switch.deselect()
         self._apply_current()
+        self._start_ticking()
 
     # -- construction ----------------------------------------------------
     def _build_ui(self):
@@ -122,10 +138,12 @@ class EyeEaseApp(ctk.CTk):
         self._build_sliders()
         self._build_swatch()
         self._build_presets()
+        self._build_schedule_row()
         self._build_pwm_row()
         self._build_zap_button()
         self._refresh_readouts()
         self._update_power_state()
+        self._update_schedule_row()
 
     def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -180,7 +198,7 @@ class EyeEaseApp(ctk.CTk):
             from_=min_val,
             to=1.0,
             orientation="vertical",
-            height=178,
+            height=158,
             width=18,
             button_length=22,
             corner_radius=9,
@@ -246,6 +264,70 @@ class EyeEaseApp(ctk.CTk):
             )
             self.preset_buttons[name] = button
 
+    def _build_schedule_row(self):
+        """Auto switch, a live status line, and the two clock times.
+
+        The sliders keep meaning 'what I want at night' while this is on —
+        during the day the screen sits neutral and eases toward those values
+        as the fade runs, which is what the status line spells out.
+        """
+        box = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
+        box.pack(fill="x", padx=22, pady=(0, 14))
+
+        top = ctk.CTkFrame(box, fg_color="transparent")
+        top.pack(fill="x", padx=14, pady=(12, 0))
+
+        self.auto_switch = ctk.CTkSwitch(
+            top,
+            text="Auto schedule",
+            font=ctk.CTkFont(size=12),
+            text_color=TEXT,
+            progress_color=ACCENT,
+            button_color=TEXT,
+            command=self._toggle_auto,
+        )
+        if self.settings["auto"]:
+            self.auto_switch.select()
+        self.auto_switch.pack(side="left")
+
+        self.schedule_status = ctk.CTkLabel(
+            top, text="", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+        )
+        self.schedule_status.pack(side="right")
+
+        times = ctk.CTkFrame(box, fg_color="transparent")
+        times.pack(fill="x", padx=14, pady=(8, 12))
+
+        ctk.CTkLabel(
+            times, text="Warm from", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+        ).pack(side="left")
+        self.start_entry = self._add_time_entry(times, self.schedule.start)
+        ctk.CTkLabel(
+            times, text="to", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+        ).pack(side="left", padx=(8, 0))
+        self.end_entry = self._add_time_entry(times, self.schedule.end)
+
+    def _add_time_entry(self, parent, value):
+        entry = ctk.CTkEntry(
+            parent,
+            width=62,
+            height=28,
+            corner_radius=8,
+            justify="center",
+            font=ctk.CTkFont(size=12),
+            fg_color=SURFACE_HI,
+            border_width=0,
+            text_color=TEXT,
+        )
+        entry.insert(0, value)
+        # Commit on Enter or when focus leaves, rather than per keystroke —
+        # "2" on the way to "20:00" isn't a time, and rejecting it mid-typing
+        # would fight the user.
+        entry.bind("<Return>", lambda _e: self._commit_times())
+        entry.bind("<FocusOut>", lambda _e: self._commit_times())
+        entry.pack(side="left", padx=(8, 0))
+        return entry
+
     def _build_pwm_row(self):
         row = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
         row.pack(fill="x", padx=22, pady=(0, 16))
@@ -296,24 +378,131 @@ class EyeEaseApp(ctk.CTk):
         self._cancel_animation()
         self._apply_current()
 
+    def _auto_active(self):
+        return self.settings["auto"] and self.schedule.is_usable()
+
     def _apply_preset(self, name):
         preset = PRESETS[name]
         target_intensity = kelvin_to_intensity(preset["kelvin"])
         if not self.settings["is_on"]:
             self.settings["is_on"] = True
             self._update_power_state()
+
+        if self._auto_active():
+            # The schedule owns what reaches the screen, so a preset only
+            # moves the night target. Easing here would fight the fade and
+            # briefly show a warmth the schedule hasn't reached yet.
+            self._cancel_animation()
+            self.warmth_slider.set(target_intensity)
+            self.brightness_slider.set(preset["brightness"])
+            self.settings["intensity"] = target_intensity
+            self.settings["brightness"] = preset["brightness"]
+            self._apply_current()
+            return
+
         self._animate_to(target_intensity, preset["brightness"])
 
     def _toggle_on_off(self):
         self.settings["is_on"] = not self.settings["is_on"]
         self._update_power_state()
         if self.settings["is_on"]:
-            # Ease back to wherever the sliders are sitting.
-            self._animate_to(
-                self.warmth_slider.get(), self.brightness_slider.get(), from_neutral=True
-            )
+            if self._auto_active():
+                self._apply_current()
+            else:
+                # Ease back to wherever the sliders are sitting.
+                self._animate_to(
+                    self.warmth_slider.get(),
+                    self.brightness_slider.get(),
+                    from_neutral=True,
+                )
         else:
             self._animate_to(0.0, 1.0, keep_sliders=True)
+
+    # -- auto schedule ---------------------------------------------------
+    def _toggle_auto(self):
+        self.settings["auto"] = self.auto_switch.get() == 1
+        self._cancel_animation()
+        self._update_schedule_row()
+        self._apply_current()
+        self._queue_save()
+
+    def _commit_times(self):
+        """Validate both entries and keep the schedule only if they parse."""
+        start = self.start_entry.get()
+        end = self.end_entry.get()
+
+        for entry, value, attribute in (
+            (self.start_entry, start, "start"),
+            (self.end_entry, end, "end"),
+        ):
+            parsed = parse_hhmm(value)
+            # Rewrite the field either way: back to the last good value if it
+            # didn't parse, or zero-padded if it did, so "7:05" doesn't sit
+            # there looking different from "20:00".
+            text = (
+                getattr(self.schedule, attribute)
+                if parsed is None
+                else "{:02d}:{:02d}".format(*parsed)
+            )
+            if parsed is not None:
+                setattr(self.schedule, attribute, text)
+            entry.delete(0, "end")
+            entry.insert(0, text)
+
+        self.settings["schedule"] = self.schedule.to_dict()
+        self._update_schedule_row()
+        self._apply_current()
+        self._queue_save()
+
+    def _update_schedule_row(self):
+        on = self.settings["auto"]
+        self.schedule_status.configure(
+            text=self.schedule.status_line() if on else "off",
+            text_color=ACCENT if on and self.schedule.fading() else TEXT_MUTED,
+        )
+        for entry in (self.start_entry, self.end_entry):
+            entry.configure(
+                state="normal" if on else "disabled",
+                text_color=TEXT if on else TEXT_MUTED,
+            )
+
+    def _start_ticking(self):
+        self._stop_ticking()
+
+        def tick():
+            # Re-arm first so a failure in the body can't silently kill the
+            # loop and leave the schedule frozen at whatever it last applied.
+            self._tick_job = self.after(TICK_MS, tick)
+            if self.settings["auto"]:
+                self._update_schedule_row()
+                if self._anim_job is None:
+                    self._apply_current()
+
+        self._tick_job = self.after(TICK_MS, tick)
+
+    def _stop_ticking(self):
+        if self._tick_job is not None:
+            self.after_cancel(self._tick_job)
+            self._tick_job = None
+
+    def _effective_values(self):
+        """The values to actually send to the screen right now.
+
+        With auto off that's just the sliders. With auto on the sliders are
+        the *night* target, and the schedule says how much of it applies —
+        0% at midday, 100% deep in the evening, sliding between the two
+        across the fade.
+        """
+        intensity = self.settings["intensity"]
+        brightness = self.settings["brightness"]
+
+        if not self.settings["auto"] or not self.schedule.is_usable():
+            return (intensity, brightness)
+
+        fraction = self.schedule.night_fraction()
+        # Neutral is intensity 0 / brightness 1, so both blends run from
+        # there toward whatever the sliders say.
+        return (intensity * fraction, 1.0 - (1.0 - brightness) * fraction)
 
     def _toggle_pwm_safe(self):
         turning_on = self.pwm_switch.get() == 1
@@ -441,10 +630,8 @@ class EyeEaseApp(ctk.CTk):
     # -- lifecycle -------------------------------------------------------
     def _apply_current(self):
         if self.settings["is_on"]:
-            self.gamma.apply(
-                intensity_to_kelvin(self.settings["intensity"]),
-                self.settings["brightness"],
-            )
+            intensity, brightness = self._effective_values()
+            self.gamma.apply(intensity_to_kelvin(intensity), brightness)
         else:
             self.gamma.reset()
         self._refresh_readouts()
@@ -453,6 +640,7 @@ class EyeEaseApp(ctk.CTk):
     def on_close(self):
         """Call this before quitting so the screen doesn't stay tinted."""
         self._cancel_animation()
+        self._stop_ticking()
         if self._save_job is not None:
             self.after_cancel(self._save_job)
             self._save_job = None

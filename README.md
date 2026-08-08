@@ -61,6 +61,12 @@ A small panel appears with:
   the sliders preview themselves
 - **Three presets** — Reading (4000K), Evening (2700K), Sleep (1900K). The
   matching preset lights up when the sliders are sitting on its values
+- **Auto schedule** — warms the screen on its own between two times you set
+  (default 20:00 to 07:00), easing in over 45 minutes rather than snapping.
+  While it's on, the sliders mean "what I want at *night*": the screen sits
+  neutral during the day and slides toward those values across the fade, and
+  the status line says which of those is happening right now. Presets still
+  work — they move the night target. The ZAP button still wins outright.
 - **PWM-safe mode switch** — locks the built-in display's physical backlight
   to 100% and restores it on quit, so all dimming happens through the gamma
   ramp instead of the backlight's own PWM. Only the primary/built-in display
@@ -78,6 +84,30 @@ Settings are saved to `~/.eyeease_settings.json` (debounced, so a slider drag
 is one write rather than dozens) and restored next launch. Settings files
 written before the Kelvin rewrite stored a 0.0-1.0 `warmth` value; it carries
 over automatically as the equivalent slider position.
+
+## Sunset/sunrise mode, and why it asks for coordinates
+`auto_schedule.py` implements the standard sunrise equation, so the schedule
+can run on real sunset and sunrise times instead of fixed clock times. It
+needs a latitude and longitude, set in `~/.eyeease_settings.json`:
+
+```json
+"schedule": {"mode": "solar", "latitude": 40.7128, "longitude": -74.0060}
+```
+
+There is deliberately no automatic location lookup. Deriving latitude from
+the time zone would be wrong by hundreds of miles — a zone is a band of
+longitude, not a point — and an IP geolocation call would mean this app
+talks to the network and learns where you are. Neither is a reasonable trade
+for a utility that dims a screen, so solar mode is opt-in and entirely
+offline. Fixed times remain the default and need nothing but a clock.
+
+Accuracy is within about a minute at ordinary latitudes (checked against
+published times for New York and Reykjavík). Polar day and polar night are
+handled: when the sun never crosses the horizon there are no events, and the
+panel says so rather than inventing a sunset.
+
+There is not yet a UI for entering coordinates — solar mode is configured by
+hand in the settings file. That's the obvious next step for it.
 
 ## What's deliberately left out of this version
 PWM-safe mode only reaches the primary/built-in display. Extending it to
