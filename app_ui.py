@@ -23,6 +23,7 @@ from gamma import (
 )
 from auto_schedule import Schedule, parse_hhmm
 import brand
+import startup
 
 SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
@@ -57,6 +58,9 @@ TRANSITION_STEPS = 16
 # minutes, so a 30s tick is far finer than the eye can follow — the point is
 # just to never be visibly behind.
 TICK_MS = 30_000
+
+# Fixed width; height is measured from the content in _fit_to_content().
+PANEL_WIDTH = 360
 
 
 def intensity_to_kelvin(intensity: float) -> float:
@@ -126,15 +130,13 @@ class EyeEaseApp(ctk.CTk):
         self._chrome_stripped = False
 
         self.title("EyeEase")
-        # Tall enough for every row to fit without pack() squeezing the last
-        # widgets — the panel has no scroll, so an overflow silently clips the
-        # EASE button right off the bottom.
-        self.geometry(f"360x716+{self._window_x}+{self._window_y}")
+        self.geometry(f"{PANEL_WIDTH}x600+{self._window_x}+{self._window_y}")
         self.resizable(False, False)
         self.configure(fg_color=BG)
         self.attributes("-topmost", True)  # small utility window stays on top
 
         self._build_ui()
+        self._fit_to_content()
         if self.settings["pwm_safe"]:
             # Restore the saved mode, but only if the hardware still allows
             # it — otherwise correct the switch rather than lie about it.
@@ -145,6 +147,18 @@ class EyeEaseApp(ctk.CTk):
         self._start_ticking()
         # Deferred so the window is mapped first — see _strip_chrome().
         self.after(80, self._strip_chrome)
+
+    def _fit_to_content(self):
+        """Size the window to whatever the rows actually need.
+
+        The panel doesn't scroll, so a hardcoded height that's a few pixels
+        short doesn't overflow visibly — pack() just squeezes the last
+        widgets and the EASE button disappears off the bottom. Asking Tk for
+        the required height means adding a row can't reintroduce that.
+        """
+        self.update_idletasks()
+        height = self.winfo_reqheight()
+        self.geometry(f"{PANEL_WIDTH}x{height}+{self._window_x}+{self._window_y}")
 
     # -- window chrome ---------------------------------------------------
     def _strip_chrome(self):
@@ -208,7 +222,7 @@ class EyeEaseApp(ctk.CTk):
         self._build_swatch()
         self._build_presets()
         self._build_schedule_row()
-        self._build_pwm_row()
+        self._build_options_card()
         self._build_power_button()
         self._refresh_readouts()
         self._update_power_state()
@@ -421,29 +435,68 @@ class EyeEaseApp(ctk.CTk):
         entry.pack(side="left", padx=(8, 0))
         return entry
 
-    def _build_pwm_row(self):
-        row = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
-        row.pack(fill="x", padx=22, pady=(0, 16))
+    def _build_options_card(self):
+        """The two on/off options that aren't about colour, in one card."""
+        card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
+        card.pack(fill="x", padx=22, pady=(0, 16))
 
-        self.pwm_switch = ctk.CTkSwitch(
+        self.pwm_switch, self.pwm_note = self._add_option_row(
+            card, "PWM-safe mode", self._toggle_pwm_safe, first=True
+        )
+        if self.settings["pwm_safe"]:
+            self.pwm_switch.select()
+
+        if startup.is_supported():
+            self.login_switch, self.login_note = self._add_option_row(
+                card, "Launch at login", self._toggle_login, first=False
+            )
+            # Read from the OS, never from saved settings — someone may have
+            # removed the login item by hand since last run, and the switch
+            # should show what's actually true.
+            if startup.is_enabled():
+                self.login_switch.select()
+        else:
+            self.login_switch = None
+            self.login_note = None
+
+    def _add_option_row(self, parent, label, command, first):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(12, 12) if first else (0, 12))
+
+        switch = ctk.CTkSwitch(
             row,
-            text="PWM-safe mode",
+            text=label,
             font=ctk.CTkFont(size=12),
             text_color=TEXT,
             progress_color=ACCENT,
             button_color=TEXT,
-            command=self._toggle_pwm_safe,
+            command=command,
         )
-        if self.settings["pwm_safe"]:
-            self.pwm_switch.select()
-        self.pwm_switch.pack(side="left", padx=14, pady=13)
+        switch.pack(side="left")
 
-        # Populated only when the switch refuses to engage, so the user learns
-        # why instead of watching it silently flip back.
-        self.pwm_note = ctk.CTkLabel(
+        # Populated only when something needs explaining — a switch that
+        # refuses to engage says why instead of silently flipping back.
+        note = ctk.CTkLabel(
             row, text="", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED
         )
-        self.pwm_note.pack(side="right", padx=14)
+        note.pack(side="right")
+        return switch, note
+
+    def _toggle_login(self):
+        turning_on = self.login_switch.get() == 1
+        succeeded = startup.enable() if turning_on else startup.disable()
+
+        if not succeeded:
+            # Put the switch back where it was rather than leaving it
+            # claiming a login item that isn't there.
+            if turning_on:
+                self.login_switch.deselect()
+            else:
+                self.login_switch.select()
+            self.login_note.configure(text="couldn't update login items")
+            return
+
+        self.login_note.configure(text="takes effect next login" if turning_on else "")
 
     def _build_power_button(self):
         # Two pre-rendered marks rather than one recoloured on the fly: the

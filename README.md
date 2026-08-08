@@ -78,6 +78,10 @@ A small panel appears with:
   is supported (external monitors need DDC/CI, which isn't wired up); if the
   OS won't grant brightness access the switch snaps back off instead of
   claiming to be active.
+- **Launch at login** — starts EyeEase when you log in. macOS gets a
+  LaunchAgent plist in `~/Library/LaunchAgents`; Windows gets a value in the
+  per-user `Run` key. Both are user-level, need no admin rights, and are a
+  single file/value you can delete by hand.
 - **EASE button** — on/off. Switching off eases the screen back to normal but
   leaves the sliders where you set them, so switching back on returns to the
   same place. Preset changes and on/off ease over ~0.4s; dragging a slider
@@ -116,6 +120,25 @@ panel says so rather than inventing a sunset.
 
 There is not yet a UI for entering coordinates — solar mode is configured by
 hand in the settings file. That's the obvious next step for it.
+
+## Launch at login — one caveat
+The login item records whatever is running when you switch it on. Packaged as
+an `.app` or `.exe` that's the app itself, which is what you want. Toggled on
+while running from source, it records *the interpreter that launched it* —
+so a login item made from inside a throwaway virtualenv stops working the
+moment that virtualenv is deleted, and macOS will quietly fail to start it.
+Turn it on from the packaged build, or re-toggle it if you move your Python.
+
+Nothing about it is mirrored into the settings file. The OS is the only real
+answer to "does this launch at login" — a saved flag would go stale the
+moment someone removed the login item by hand, and the switch would then be
+claiming something untrue. `is_enabled()` always goes and looks.
+
+macOS deliberately does not `launchctl load` the plist when you switch it on.
+launchd reads `~/Library/LaunchAgents` at login, which is exactly when this
+should take effect; loading it immediately would start a second copy of the
+app on top of the one you're looking at. Switching it off does bootout, so
+the setting doesn't linger until the next restart.
 
 ## What's deliberately left out of this version
 PWM-safe mode only reaches the primary/built-in display. Extending it to
