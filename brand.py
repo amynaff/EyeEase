@@ -5,19 +5,29 @@ Everything visual pulls from here: the panel, the tray icon, and the icon
 generator. Keeping it in one module is what stops the app ending up with
 three slightly different oranges that all claim to be the brand colour.
 
-Why amber rather than a red: amber is the colour the app itself produces at
-evening temperatures — kelvin_to_hex(2700) is #ffa759 — so the brand matches
-what the product actually does to a screen. A red alarm accent on a tool
-whose entire job is removing harsh light argues with itself.
+Why amber rather than a red: the accent IS what the product does. AMBER is
+exactly kelvin_to_hex(2700) — the colour this app turns a screen at the
+Evening preset, the setting most people leave it on. A red alarm accent on a
+tool whose entire job is removing harsh light argues with itself.
+
+The accent also has to survive the app's own effect. Everything on screen,
+including this panel, is filtered through the gamma ramp, and deep warmth
+takes the blue channel to zero — so a blue or teal accent would darken to an
+unreadable smudge exactly when the app is working hardest. Warm hues are the
+only ones that stay legible at 1900K.
+
+The darker shades are derived from AMBER by lightness, then pushed further
+until the text on them clears 4.5:1. The obvious arithmetic shades landed at
+4.2 and 3.7, which look fine on a bright monitor and fail on a dim one.
 """
 
 from PIL import Image, ImageChops, ImageDraw
 
 # -- palette ------------------------------------------------------------
-AMBER = "#f59e0b"        # primary accent
-AMBER_BRIGHT = "#ffb733"  # hover / lifted state
-AMBER_DIM = "#7a4f06"     # inactive or "off" state
-INK = "#1a1200"           # text and marks sitting on top of amber
+AMBER = "#ffa759"        # primary accent — kelvin_to_hex(2700)
+AMBER_BRIGHT = "#fec28c"  # hover / lifted state
+AMBER_DIM = "#a04b00"     # active-but-quiet: preset chips, dimmed status dot
+INK = "#3f1d00"           # text and marks sitting on top of amber (7.9:1)
 
 BG = "#0d0d0f"
 SURFACE = "#17171b"
