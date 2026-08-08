@@ -7,41 +7,126 @@ ramps are a straight line (input 100 -> output 100). We bend the green
 and blue lines downward, so no matter what color a pixel is supposed to
 be, less green/blue light actually reaches your eyes.
 
-warmth: 0.0 (screen unchanged) -> 1.0 (green and blue fully removed, pure red)
-brightness: 0.15 -> 1.0 (scales all three channels down together, a software dim)
+How far we bend them is set by a colour temperature in Kelvin — the same
+scale f.lux and Redshift use, so the numbers mean something to people who
+have used those:
+
+    6500K  daylight; screen left exactly as-is
+    5000K  barely-there warm cast, fine for daytime
+    4000K  soft white, comfortable for reading
+    2700K  incandescent bulb, the usual evening setting
+    1900K  candlelight, almost no blue left
+    1200K  deep amber, the most aggressive setting
+
+Warmth is NOT "turn green and blue down together" — doing that just
+desaturates the picture toward red and looks like a darkroom. A genuinely
+warm screen follows the blackbody curve, where blue falls away fast while
+green falls much more slowly. That gap between the two curves is the whole
+reason 2700K reads as candlelight instead of red. kelvin_to_rgb() computes
+it.
+
+brightness: 0.15 -> 1.0 (scales all three channels together, a software dim)
 """
 
 import sys
+import math
 import ctypes
 import platform
 import subprocess
 
 RAMP_SIZE = 256
 
+# Usable ends of the colour-temperature slider. 6500K is the neutral point
+# (ramp left as a straight line, screen untouched); 1200K matches the
+# warmest setting f.lux offers.
+KELVIN_NEUTRAL = 6500
+KELVIN_MIN = 1200
+KELVIN_MAX = 6500
 
-def build_ramp(warmth: float, brightness: float):
+
+def _planckian(kelvin: float):
+    """Raw 0-255 channel values for a blackbody radiator at `kelvin`.
+
+    Tanner Helland's well-known piecewise approximation of the Planckian
+    locus. Accurate to about 1% across 1000-40000K, which is far tighter
+    than the eye can resolve as a colour cast.
+    """
+    kelvin = max(1000.0, min(40000.0, float(kelvin)))
+    t = kelvin / 100.0
+
+    if t <= 66:
+        red = 255.0
+        green = 99.4708025861 * math.log(t) - 161.1195681661
+    else:
+        red = 329.698727446 * ((t - 60) ** -0.1332047592)
+        green = 288.1221695283 * ((t - 60) ** -0.0755148492)
+
+    if t >= 66:
+        blue = 255.0
+    elif t <= 19:
+        # Below ~1900K a blackbody emits essentially no blue at all. The
+        # curve below approaches zero smoothly as t nears 19, so this is a
+        # floor rather than a cliff.
+        blue = 0.0
+    else:
+        blue = 138.5177312231 * math.log(t - 10) - 305.0447927307
+
+    return (
+        max(0.0, min(255.0, red)),
+        max(0.0, min(255.0, green)),
+        max(0.0, min(255.0, blue)),
+    )
+
+
+def kelvin_to_rgb(kelvin: float):
+    """Colour temperature -> (r, g, b) channel multipliers, each 0.0-1.0.
+
+    Normalised against the 6500K result so that kelvin=6500 returns exactly
+    (1.0, 1.0, 1.0) — a screen we haven't touched. Without that step even
+    the "neutral" setting would tint slightly, since the raw curve doesn't
+    hit pure white at any temperature.
+    """
+    r, g, b = _planckian(kelvin)
+    nr, ng, nb = _planckian(KELVIN_NEUTRAL)
+    return (r / nr, g / ng, b / nb)
+
+
+def kelvin_to_hex(kelvin: float, brightness: float = 1.0) -> str:
+    """The tint as a '#rrggbb' string, for showing a preview swatch in the UI.
+
+    This is the colour a white pixel ends up as, so the swatch shows the
+    user what their screen is actually about to do.
+    """
+    r, g, b = kelvin_to_rgb(kelvin)
+    scale = max(0.15, min(1.0, brightness))
+    return "#{:02x}{:02x}{:02x}".format(
+        int(round(r * scale * 255)),
+        int(round(g * scale * 255)),
+        int(round(b * scale * 255)),
+    )
+
+
+def build_ramp(kelvin: float, brightness: float):
     """Returns three lists of 256 ints (0-65535) for R, G, B."""
-    warmth = max(0.0, min(1.0, warmth))
+    kelvin = max(KELVIN_MIN, min(KELVIN_MAX, kelvin))
     brightness = max(0.15, min(1.0, brightness))
+
+    kr, kg, kb = kelvin_to_rgb(kelvin)
 
     red, green, blue = [], [], []
     for i in range(RAMP_SIZE):
         base = i / (RAMP_SIZE - 1)  # 0.0 -> 1.0
 
-        r = base
-        g = base * (1 - warmth)          # green fades out as warmth rises
-        b = base * (1 - warmth * 1.0)    # blue fades out first / fastest
+        # brightness is a simple multiply — a "software dim" that never
+        # touches the physical backlight. PWM-safe mode below is what pins
+        # the backlight at 100% so it can't flicker while we dim here.
+        r = base * kr * brightness
+        g = base * kg * brightness
+        b = base * kb * brightness
 
-        # brightness is a simple multiply — a "software dim" that doesn't
-        # touch the physical backlight (that's the harder PWM-safe feature,
-        # see README for why it's left out of this version)
-        r *= brightness
-        g *= brightness
-        b *= brightness
-
-        red.append(int(r * 65535))
-        green.append(int(g * 65535))
-        blue.append(int(b * 65535))
+        red.append(int(round(r * 65535)))
+        green.append(int(round(g * 65535)))
+        blue.append(int(round(b * 65535)))
 
     return red, green, blue
 
@@ -53,8 +138,8 @@ class GammaController:
         self.system = platform.system()  # 'Darwin', 'Windows', 'Linux'
         self._saved_hw_brightness = None  # set while PWM-safe mode is active
 
-    def apply(self, warmth: float, brightness: float):
-        red, green, blue = build_ramp(warmth, brightness)
+    def apply(self, kelvin: float, brightness: float):
+        red, green, blue = build_ramp(kelvin, brightness)
         if self.system == "Darwin":
             self._apply_macos(red, green, blue)
         elif self.system == "Windows":
@@ -64,7 +149,7 @@ class GammaController:
 
     def reset(self):
         """Restore a normal, unmodified screen."""
-        self.apply(warmth=0.0, brightness=1.0)
+        self.apply(kelvin=KELVIN_NEUTRAL, brightness=1.0)
 
     # -- PWM-safe mode ---------------------------------------------------
     # The "brightness" slider above only ever dims via the gamma ramp — it

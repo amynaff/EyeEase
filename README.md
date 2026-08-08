@@ -7,9 +7,16 @@ one ZAP button, lives in the tray.
 ## How it works, in one paragraph
 Every screen redraws pixels through a "gamma ramp" — a lookup table that maps
 input color to output color for red, green, and blue separately. This app
-bends the green/blue curves downward so those colors get dimmer no matter
-what's on screen, while brightness scales all three curves together as a
-software dim. `gamma.py` has the full explanation inline.
+bends the green and blue curves down to match a blackbody radiator at a given
+colour temperature, the same 6500K-to-1200K scale f.lux and Redshift use, so
+less blue light reaches your eyes no matter what's on screen. Brightness
+scales all three curves together as a software dim. `gamma.py` has the full
+explanation inline.
+
+Bending green and blue down *together* would only desaturate toward red. What
+makes a screen look warm rather than red is the gap between the two curves —
+blue falls away fast while green falls slowly — which is exactly what the
+blackbody curve in `kelvin_to_rgb()` produces.
 
 ## Setup
 Requires Python 3.9+ with Tk support.
@@ -47,20 +54,30 @@ python3 main.py
 ```
 
 A small panel appears with:
-- **Warmth slider** — 0 (screen unchanged) to 1 (blue/green removed, pure red)
-- **Brightness slider** — software dim, 0.15 to 1.0
-- **Three presets** — Reading, Evening, Sleep
+- **Warmth slider** — vertical; drag up for warmer. Reads out in Kelvin,
+  6500K (screen untouched) down to 1200K (deep amber, no blue left)
+- **Brightness slider** — software dim, 15% to 100%
+- **Live preview strip** — the colour a white pixel will actually become, so
+  the sliders preview themselves
+- **Three presets** — Reading (4000K), Evening (2700K), Sleep (1900K). The
+  matching preset lights up when the sliders are sitting on its values
 - **PWM-safe mode switch** — locks the built-in display's physical backlight
   to 100% and restores it on quit, so all dimming happens through the gamma
   ramp instead of the backlight's own PWM. Only the primary/built-in display
   is supported (external monitors need DDC/CI, which isn't wired up); if the
   OS won't grant brightness access the switch snaps back off instead of
   claiming to be active.
-- **⚡ button** — on/off, screen reverts instantly when off
+- **ZAP button** — on/off. Switching off eases the screen back to normal but
+  leaves the sliders where you set them, so switching back on returns to the
+  same place. Preset changes and on/off ease over ~0.4s; dragging a slider
+  applies instantly, since animating a drag just reads as input lag
 - Closing the panel just hides it to the tray icon; use Quit from the tray
   menu to fully exit (this also resets your screen automatically)
 
-Settings are saved to `~/.eyeease_settings.json` and restored next launch.
+Settings are saved to `~/.eyeease_settings.json` (debounced, so a slider drag
+is one write rather than dozens) and restored next launch. Settings files
+written before the Kelvin rewrite stored a 0.0-1.0 `warmth` value; it carries
+over automatically as the equivalent slider position.
 
 ## What's deliberately left out of this version
 PWM-safe mode only reaches the primary/built-in display. Extending it to
