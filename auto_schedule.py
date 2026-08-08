@@ -117,6 +117,43 @@ def parse_hhmm(text: str):
     return (h, m)
 
 
+def _parse_coordinate(text, limit: float):
+    """Parse a signed decimal degree, or None if it isn't one.
+
+    Accepts a trailing hemisphere letter ("40.7 N", "74.0 W") because that's
+    how coordinates are usually written down, and W/S mean a negative value.
+    """
+    if text is None:
+        return None
+    cleaned = str(text).strip().upper().replace("°", "")
+    if not cleaned:
+        return None
+
+    sign = 1.0
+    if cleaned and cleaned[-1] in "NSEW":
+        if cleaned[-1] in "SW":
+            sign = -1.0
+        cleaned = cleaned[:-1].strip()
+
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+
+    value *= sign
+    if not -limit <= value <= limit:
+        return None
+    return value
+
+
+def parse_latitude(text):
+    return _parse_coordinate(text, 90.0)
+
+
+def parse_longitude(text):
+    return _parse_coordinate(text, 180.0)
+
+
 def _smoothstep(t: float) -> float:
     t = max(0.0, min(1.0, t))
     return t * t * (3 - 2 * t)
@@ -230,7 +267,7 @@ class Schedule:
         """Short human description of what the schedule is doing, for the UI."""
         now = now or datetime.now().astimezone()
         if not self.is_usable():
-            return "set a time to enable"
+            return "enter coordinates" if self.mode == "solar" else "set a time"
 
         fraction = self.night_fraction(now)
         upcoming = self.next_event(now)

@@ -21,7 +21,12 @@ from gamma import (
     KELVIN_MIN,
     kelvin_to_hex,
 )
-from auto_schedule import Schedule, parse_hhmm
+from auto_schedule import (
+    Schedule,
+    parse_hhmm,
+    parse_latitude,
+    parse_longitude,
+)
 import brand
 import startup
 
@@ -61,6 +66,10 @@ TICK_MS = 30_000
 
 # Fixed width; height is measured from the content in _fit_to_content().
 PANEL_WIDTH = 360
+
+# Labels on the schedule mode selector, mapped to Schedule.mode.
+MODE_FIXED = "Fixed times"
+MODE_SOLAR = "Sunset/sunrise"
 
 
 def intensity_to_kelvin(intensity: float) -> float:
@@ -402,17 +411,142 @@ class EyeEaseApp(ctk.CTk):
         )
         self.schedule_status.pack(side="right")
 
-        times = ctk.CTkFrame(box, fg_color="transparent")
-        times.pack(fill="x", padx=14, pady=(8, 12))
+        # Two plain buttons rather than CTkSegmentedButton: that widget uses
+        # one text colour for every segment, so whatever reads well on the
+        # amber selection is unreadable on the dark unselected one. This is
+        # the same active/inactive treatment the presets row uses.
+        mode_row = ctk.CTkFrame(box, fg_color="transparent")
+        mode_row.pack(fill="x", padx=14, pady=(10, 0))
+        mode_row.grid_columnconfigure((0, 1), weight=1, uniform="modes")
 
+        self.mode_buttons = {}
+        for i, (label, mode) in enumerate(
+            ((MODE_FIXED, "fixed"), (MODE_SOLAR, "solar"))
+        ):
+            button = ctk.CTkButton(
+                mode_row,
+                text=label,
+                height=28,
+                corner_radius=8,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                command=lambda m=mode: self._change_schedule_mode(m),
+            )
+            button.grid(row=0, column=i, sticky="ew", padx=(0, 4) if i == 0 else (4, 0))
+            self.mode_buttons[mode] = button
+        self._update_mode_buttons()
+
+        # Both input rows are built once and swapped by packing, so switching
+        # mode never loses what was typed in the other one.
+        self.times_row = ctk.CTkFrame(box, fg_color="transparent")
         ctk.CTkLabel(
-            times, text="Warm from", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+            self.times_row, text="Warm from", font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
         ).pack(side="left")
-        self.start_entry = self._add_time_entry(times, self.schedule.start)
+        self.start_entry = self._add_time_entry(self.times_row, self.schedule.start)
         ctk.CTkLabel(
-            times, text="to", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+            self.times_row, text="to", font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
         ).pack(side="left", padx=(8, 0))
-        self.end_entry = self._add_time_entry(times, self.schedule.end)
+        self.end_entry = self._add_time_entry(self.times_row, self.schedule.end)
+
+        self.coords_row = ctk.CTkFrame(box, fg_color="transparent")
+        ctk.CTkLabel(
+            self.coords_row, text="Lat", font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
+        ).pack(side="left")
+        self.lat_entry = self._add_coord_entry(
+            self.coords_row, self.schedule.latitude
+        )
+        ctk.CTkLabel(
+            self.coords_row, text="Lon", font=ctk.CTkFont(size=11),
+            text_color=TEXT_MUTED,
+        ).pack(side="left", padx=(10, 0))
+        self.lon_entry = self._add_coord_entry(
+            self.coords_row, self.schedule.longitude
+        )
+
+        self._show_schedule_inputs()
+
+    def _show_schedule_inputs(self):
+        """Pack whichever input row matches the current mode."""
+        self.times_row.pack_forget()
+        self.coords_row.pack_forget()
+        row = self.coords_row if self.schedule.mode == "solar" else self.times_row
+        row.pack(fill="x", padx=14, pady=(8, 12))
+
+    def _update_mode_buttons(self):
+        for mode, button in self.mode_buttons.items():
+            active = self.schedule.mode == mode
+            button.configure(
+                fg_color=ACCENT_DIM if active else SURFACE_HI,
+                hover_color=ACCENT_DIM if active else SURFACE_HI,
+                text_color=TEXT if active else TEXT_MUTED,
+            )
+
+    def _change_schedule_mode(self, mode):
+        self.schedule.mode = mode
+        self.settings["schedule"] = self.schedule.to_dict()
+        self._update_mode_buttons()
+        self._show_schedule_inputs()
+        self._fit_to_content()
+        self._update_schedule_row()
+        self._apply_current()
+        self._queue_save()
+
+    def _add_coord_entry(self, parent, value):
+        entry = ctk.CTkEntry(
+            parent,
+            width=78,
+            height=28,
+            corner_radius=8,
+            justify="center",
+            font=ctk.CTkFont(size=12),
+            fg_color=SURFACE_HI,
+            border_width=0,
+            text_color=TEXT,
+            placeholder_text="—",
+        )
+        if value is not None:
+            entry.insert(0, f"{value:g}")
+        entry.bind("<Return>", lambda _e: self._commit_coords())
+        entry.bind("<FocusOut>", lambda _e: self._commit_coords())
+        entry.pack(side="left", padx=(8, 0))
+        return entry
+
+    def _commit_coords(self):
+        """Validate both coordinates, keeping each only if it parses.
+
+        Empty is allowed and means "not set" — that's how you clear a
+        coordinate, and the schedule reports itself unusable rather than
+        guessing a location.
+        """
+        for entry, parser, attribute in (
+            (self.lat_entry, parse_latitude, "latitude"),
+            (self.lon_entry, parse_longitude, "longitude"),
+        ):
+            raw = entry.get().strip()
+            if not raw:
+                setattr(self.schedule, attribute, None)
+                entry.delete(0, "end")
+                continue
+
+            parsed = parser(raw)
+            if parsed is None:
+                # Put back the last good value rather than leaving something
+                # that looks accepted but isn't.
+                previous = getattr(self.schedule, attribute)
+                entry.delete(0, "end")
+                if previous is not None:
+                    entry.insert(0, f"{previous:g}")
+            else:
+                setattr(self.schedule, attribute, parsed)
+                entry.delete(0, "end")
+                entry.insert(0, f"{parsed:g}")
+
+        self.settings["schedule"] = self.schedule.to_dict()
+        self._update_schedule_row()
+        self._apply_current()
+        self._queue_save()
 
     def _add_time_entry(self, parent, value):
         entry = ctk.CTkEntry(
@@ -624,11 +758,18 @@ class EyeEaseApp(ctk.CTk):
             text=self.schedule.status_line() if on else "off",
             text_color=ACCENT if on and self.schedule.fading() else TEXT_MUTED,
         )
-        for entry in (self.start_entry, self.end_entry):
+        for entry in (
+            self.start_entry,
+            self.end_entry,
+            self.lat_entry,
+            self.lon_entry,
+        ):
             entry.configure(
                 state="normal" if on else "disabled",
                 text_color=TEXT if on else TEXT_MUTED,
             )
+        for button in self.mode_buttons.values():
+            button.configure(state="normal" if on else "disabled")
 
     def _start_ticking(self):
         self._stop_ticking()

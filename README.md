@@ -66,8 +66,9 @@ A small panel appears with:
   the sliders preview themselves
 - **Three presets** — Reading (4000K), Evening (2700K), Sleep (1900K). The
   matching preset lights up when the sliders are sitting on its values
-- **Auto schedule** — warms the screen on its own between two times you set
-  (default 20:00 to 07:00), easing in over 45 minutes rather than snapping.
+- **Auto schedule** — warms the screen on its own, either between two clock
+  times (default 20:00 to 07:00) or between real sunset and sunrise if you
+  enter coordinates, easing in over 45 minutes rather than snapping.
   While it's on, the sliders mean "what I want at *night*": the screen sits
   neutral during the day and slides toward those values across the fade, and
   the status line says which of those is happening right now. Presets still
@@ -99,12 +100,20 @@ over automatically as the equivalent slider position.
 
 ## Sunset/sunrise mode, and why it asks for coordinates
 `auto_schedule.py` implements the standard sunrise equation, so the schedule
-can run on real sunset and sunrise times instead of fixed clock times. It
-needs a latitude and longitude, set in `~/.eyeease_settings.json`:
+can run on real sunset and sunrise times instead of fixed clock times. Switch
+the schedule card to **Sunset/sunrise** and type a latitude and longitude.
 
-```json
-"schedule": {"mode": "solar", "latitude": 40.7128, "longitude": -74.0060}
-```
+The fields accept plain signed decimals (`40.7128`, `-74.006`) or a trailing
+hemisphere letter (`40.7 N`, `74.0 W`), since that's how coordinates are
+usually written down. Anything out of range or unparseable reverts to the
+last good value rather than sitting there looking accepted; clearing a field
+unsets it, and the schedule then reports itself unusable instead of guessing
+a location. Both modes keep their own settings, so switching back and forth
+doesn't lose your times or your coordinates.
+
+Sun times are shown in *your computer's* local time. Setting coordinates for
+somewhere in another time zone is therefore legitimate but odd-looking — you
+get that place's sunset expressed in your clock. Use where you actually are.
 
 There is deliberately no automatic location lookup. Deriving latitude from
 the time zone would be wrong by hundreds of miles — a zone is a band of
@@ -117,9 +126,6 @@ Accuracy is within about a minute at ordinary latitudes (checked against
 published times for New York and Reykjavík). Polar day and polar night are
 handled: when the sun never crosses the horizon there are no events, and the
 panel says so rather than inventing a sunset.
-
-There is not yet a UI for entering coordinates — solar mode is configured by
-hand in the settings file. That's the obvious next step for it.
 
 ## Launch at login — one caveat
 The login item records whatever is running when you switch it on. Packaged as
