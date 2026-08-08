@@ -147,13 +147,13 @@ class EyeEaseApp(ctk.CTk):
 
         self._build_ui()
         self._fit_to_content()
-        if self.settings["pwm_safe"]:
+        if self.settings["pwm_safe"] and self.pwm_switch is not None:
             # Restore the saved mode, but only if the hardware still allows
             # it — otherwise correct the switch rather than lie about it.
             if not self.gamma.enable_pwm_safe():
                 self.settings["pwm_safe"] = False
                 self.pwm_switch.deselect()
-                self.pwm_note.configure(text="can't control this backlight")
+                self.pwm_note.configure(text="can't hold this backlight")
         self._apply_current()
         self._start_ticking()
         # Deferred so the window is mapped first — see _strip_chrome().
@@ -554,19 +554,39 @@ class EyeEaseApp(ctk.CTk):
         return entry
 
     def _build_options_card(self):
-        """The two on/off options that aren't about colour, in one card."""
+        """The on/off options that aren't about colour, in one card."""
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
         card.pack(fill="x", padx=22, pady=(0, 16))
 
-        self.pwm_switch, self.pwm_note = self._add_option_row(
-            card, "PWM-safe mode", self._toggle_pwm_safe, first=True
-        )
-        if self.settings["pwm_safe"]:
-            self.pwm_switch.select()
+        # Asked once at startup. A switch that can only ever refuse is worse
+        # than no switch — it invites the user to keep trying something that
+        # cannot work on their hardware. Where the backlight can't be driven,
+        # the option simply isn't offered.
+        self._backlight_controllable = self.gamma.can_control_backlight()
+
+        if self._backlight_controllable:
+            self.pwm_switch, self.pwm_note = self._add_option_row(
+                card,
+                "No-flicker dimming",
+                self._toggle_pwm_safe,
+                first=True,
+                description="Holds the backlight steady and dims in software",
+            )
+            if self.settings["pwm_safe"]:
+                self.pwm_switch.select()
+        else:
+            self.pwm_switch = None
+            self.pwm_note = None
+            # Can't be active if it can't be controlled — don't let a stale
+            # saved value have the app believe otherwise.
+            self.settings["pwm_safe"] = False
 
         if startup.is_supported():
             self.login_switch, self.login_note = self._add_option_row(
-                card, "Launch at login", self._toggle_login, first=False
+                card,
+                "Launch at login",
+                self._toggle_login,
+                first=not self._backlight_controllable,
             )
             # Read from the OS, never from saved settings — someone may have
             # removed the login item by hand since last run, and the switch
@@ -577,12 +597,15 @@ class EyeEaseApp(ctk.CTk):
             self.login_switch = None
             self.login_note = None
 
-    def _add_option_row(self, parent, label, command, first):
+    def _add_option_row(self, parent, label, command, first, description=None):
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=(12, 12) if first else (0, 12))
 
+        top = ctk.CTkFrame(row, fg_color="transparent")
+        top.pack(fill="x")
+
         switch = ctk.CTkSwitch(
-            row,
+            top,
             text=label,
             font=ctk.CTkFont(size=12),
             text_color=TEXT,
@@ -595,9 +618,21 @@ class EyeEaseApp(ctk.CTk):
         # Populated only when something needs explaining — a switch that
         # refuses to engage says why instead of silently flipping back.
         note = ctk.CTkLabel(
-            row, text="", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED
+            top, text="", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED
         )
         note.pack(side="right")
+
+        if description:
+            # "PWM" is jargon. The switch says what it does; this says what
+            # that means.
+            ctk.CTkLabel(
+                row,
+                text=description,
+                font=ctk.CTkFont(size=10),
+                text_color=TEXT_MUTED,
+                anchor="w",
+            ).pack(fill="x", padx=(46, 0), pady=(2, 0))
+
         return switch, note
 
     def _toggle_login(self):
@@ -807,7 +842,7 @@ class EyeEaseApp(ctk.CTk):
     def _hold_pwm_safe(self):
         """Keep the backlight pinned while the mode is on, and stop claiming
         the mode if the backlight slips out of our control."""
-        if not self.settings["pwm_safe"]:
+        if not self.settings["pwm_safe"] or self.pwm_switch is None:
             return
         if self.gamma.hold_pwm_safe():
             return
@@ -825,10 +860,10 @@ class EyeEaseApp(ctk.CTk):
                 # permission, etc.) — leave the switch off instead of
                 # claiming a mode that isn't actually active.
                 self.pwm_switch.deselect()
-                self.pwm_note.configure(text="can't control this backlight")
+                self.pwm_note.configure(text="can't hold this backlight")
                 turning_on = False
             else:
-                self.pwm_note.configure(text="backlight locked 100%")
+                self.pwm_note.configure(text="backlight held steady")
         else:
             self.gamma.disable_pwm_safe()
             self.pwm_note.configure(text="")

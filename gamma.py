@@ -209,6 +209,19 @@ class GammaController:
         self._set_hw_brightness(current)
         return moved
 
+    def can_control_backlight(self) -> bool:
+        """Whether no-flicker dimming is possible here at all.
+
+        Lets the UI leave the option out entirely rather than showing a
+        switch that can only ever refuse. Costs one probe: on a machine that
+        does respond, the backlight blips 5% for a few milliseconds; on one
+        that doesn't — the case this exists to detect — nothing moves.
+        """
+        current = self._get_hw_brightness()
+        if current is None:
+            return False
+        return self._backlight_is_writable(current)
+
     def enable_pwm_safe(self):
         """Locks the physical backlight to 100%, remembering the old level
         so it can be restored later. Returns True only if the lock is

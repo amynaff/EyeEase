@@ -73,14 +73,27 @@ A small panel appears with:
   neutral during the day and slides toward those values across the fade, and
   the status line says which of those is happening right now. Presets still
   work — they move the night target. The EASE button still wins outright.
-- **PWM-safe mode switch** — locks the built-in display's physical backlight
-  to 100% and restores it on quit, so all dimming happens through the gamma
-  ramp instead of the backlight's own PWM. It re-asserts the lock every 30
-  seconds, so pressing the brightness keys or macOS auto-brightness can't
-  quietly drop you back into PWM dimming while the switch still claims to be
-  on. Only the primary/built-in display is supported (external monitors need
-  DDC/CI, which isn't wired up). If the backlight can't be driven, the switch
-  refuses to engage and says so — see below.
+- **No-flicker dimming** — most screens dim by switching the backlight fully
+  on and off hundreds of times a second (pulse-width modulation). Your eye
+  averages it into "dimmer"; a minority get headaches and eye strain from it,
+  worst at low brightness. This holds the backlight at 100%, where there is
+  no flicker because the LED never switches off, and does all the dimming in
+  software through the gamma ramp instead. It re-asserts that every 30
+  seconds, so the brightness keys or auto-brightness can't quietly put you
+  back into flickering while the switch still claims to be on. Only the
+  primary/built-in display is supported (external monitors need DDC/CI, which
+  isn't wired up).
+
+  **The option is only shown when the backlight can actually be driven.** On
+  startup the app nudges the brightness 5% and reads it back; if nothing
+  moves, the row isn't built at all rather than offering a switch that could
+  only ever refuse. That is the case on macOS 26, where the private
+  CoreDisplay call accepts the write and does nothing — so on a current Mac
+  you won't see this option, and that's correct rather than broken.
+
+  It was called "PWM-safe mode". The acronym meant nothing to anyone who
+  hadn't already researched the problem, which is precisely the audience the
+  feature exists for.
 - **Launch at login** — starts EyeEase when you log in. macOS gets a
   LaunchAgent plist in `~/Library/LaunchAgents`; Windows gets a value in the
   per-user `Run` key. Both are user-level, need no admin rights, and are a
