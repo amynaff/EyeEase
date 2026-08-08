@@ -75,10 +75,12 @@ A small panel appears with:
   work — they move the night target. The EASE button still wins outright.
 - **PWM-safe mode switch** — locks the built-in display's physical backlight
   to 100% and restores it on quit, so all dimming happens through the gamma
-  ramp instead of the backlight's own PWM. Only the primary/built-in display
-  is supported (external monitors need DDC/CI, which isn't wired up); if the
-  OS won't grant brightness access the switch snaps back off instead of
-  claiming to be active.
+  ramp instead of the backlight's own PWM. It re-asserts the lock every 30
+  seconds, so pressing the brightness keys or macOS auto-brightness can't
+  quietly drop you back into PWM dimming while the switch still claims to be
+  on. Only the primary/built-in display is supported (external monitors need
+  DDC/CI, which isn't wired up). If the backlight can't be driven, the switch
+  refuses to engage and says so — see below.
 - **Launch at login** — starts EyeEase when you log in. macOS gets a
   LaunchAgent plist in `~/Library/LaunchAgents`; Windows gets a value in the
   per-user `Run` key. Both are user-level, need no admin rights, and are a
@@ -166,10 +168,24 @@ rather than refusing to start.
 The macOS side of PWM-safe mode uses `CoreDisplay`, an undocumented private
 framework (the same one tools like the `brightness` CLI rely on, since
 Apple's public IOKit brightness API stopped working for the internal panel
-on Apple Silicon). Private frameworks can move or disappear across macOS
-versions without notice — if that happens, `enable_pwm_safe()` fails closed
-(returns `False`) and the switch in the UI won't turn on, rather than
-silently doing nothing.
+on Apple Silicon). Private frameworks move or stop working across macOS
+versions without notice, and this one has: on macOS 26 the write call
+raises nothing, returns success, and changes nothing at all.
+
+There is no error to catch, so `enable_pwm_safe()` proves the backlight is
+drivable rather than assuming it. It nudges the brightness by 5% and reads
+it back; if it didn't move, the mode refuses to engage and the panel says
+"can't control this backlight". The nudge is deliberately *away* from where
+the backlight already sits — an earlier version only verified when the
+backlight started below 98%, so on a display already at full, setting it to
+full again "succeeded" and a completely dead write path passed for a working
+PWM-safe mode.
+
+`hold_pwm_safe()` re-asserts the lock on the app's 30-second tick, because
+"locked to 100%" was otherwise only true for the instant the switch was
+flipped. If the backlight slips and can't be put back, the switch turns
+itself off with "lost control of backlight" rather than continuing to claim
+a lock it doesn't have.
 
 ## Packaging into a real .app (macOS)
 Use the same Tk-capable `python3` called out in Setup above — PyInstaller

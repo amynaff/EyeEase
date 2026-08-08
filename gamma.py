@@ -43,6 +43,12 @@ KELVIN_NEUTRAL = 6500
 KELVIN_MIN = 1200
 KELVIN_MAX = 6500
 
+# How far PWM-safe mode nudges the backlight when testing whether it can
+# drive it at all. Big enough to read back reliably, small enough that the
+# momentary blip isn't worth noticing.
+PWM_PROBE_DELTA = 0.05
+PWM_PROBE_TOLERANCE = 0.02
+
 
 def _planckian(kelvin: float):
     """Raw 0-255 channel values for a blackbody radiator at `kelvin`.
@@ -163,28 +169,81 @@ class GammaController:
     # need DDC/CI, which has no built-in OS API on either platform (RedShift
     # doesn't support it either) — left as a future step.
 
+    def _backlight_is_writable(self, current: float) -> bool:
+        """Prove we can actually move the backlight, instead of assuming.
+
+        The macOS write call reports success (raises nothing, returns True)
+        while silently doing nothing whenever the process isn't allowed to
+        drive CoreDisplay — and on some macOS versions it does nothing at
+        all. There is no error to catch, so the only honest test is to move
+        the brightness and read it back.
+
+        This matters most when the backlight already sits at 100%: setting
+        it to 100% again "succeeds" trivially, which is how a completely
+        dead write path used to pass for a working PWM-safe mode. So the
+        probe deliberately aims somewhere the backlight isn't.
+        """
+        probe = current - PWM_PROBE_DELTA
+        if probe < 0.1:
+            probe = current + PWM_PROBE_DELTA
+        if probe > 1.0 or probe < 0.0:
+            return False
+
+        self._set_hw_brightness(probe)
+        seen = self._get_hw_brightness()
+        moved = seen is not None and abs(seen - probe) < PWM_PROBE_TOLERANCE
+
+        # Put it back whatever the answer — the probe is a test, not a change.
+        self._set_hw_brightness(current)
+        return moved
+
     def enable_pwm_safe(self):
         """Locks the physical backlight to 100%, remembering the old level
-        so it can be restored later. Returns True on success."""
+        so it can be restored later. Returns True only if the lock is
+        verifiably in place."""
         current = self._get_hw_brightness()
         if current is None:
             return False
-        self._saved_hw_brightness = current
-        if not self._set_hw_brightness(1.0):
-            self._saved_hw_brightness = None
+
+        if not self._backlight_is_writable(current):
             return False
 
-        # The macOS write call can report success (no exception) while
-        # silently doing nothing — observed when calling it from a script
-        # in a restricted/sandboxed execution context; confirmed working
-        # in a normal `python3 main.py` run. If brightness wasn't already
-        # ~100%, confirm it actually moved before trusting the call.
-        if current < 0.98:
-            after = self._get_hw_brightness()
-            if after is None or after < 0.98:
-                self._saved_hw_brightness = None
-                return False
+        self._saved_hw_brightness = current
+        self._set_hw_brightness(1.0)
+
+        # Confirm unconditionally. The old code only checked when the
+        # backlight started below 98%, so a display already at full let an
+        # entirely non-functional write path report success.
+        after = self._get_hw_brightness()
+        if after is None or after < 0.98:
+            self._set_hw_brightness(current)
+            self._saved_hw_brightness = None
+            return False
         return True
+
+    def hold_pwm_safe(self) -> bool:
+        """Re-assert the 100% lock; call this periodically while active.
+
+        Without it, "locked to 100%" is only true for the instant the switch
+        is flipped — pressing the brightness keys, or macOS auto-brightness,
+        drops the backlight straight back into PWM dimming while the UI
+        still claims the mode is on.
+
+        Returns False if the backlight has slipped and can't be put back,
+        which is the caller's cue to stop claiming the mode is active.
+        """
+        if self._saved_hw_brightness is None:
+            return True  # not active, nothing to hold
+
+        current = self._get_hw_brightness()
+        if current is None:
+            return False
+        if current >= 0.98:
+            return True  # still where we left it
+
+        self._set_hw_brightness(1.0)
+        after = self._get_hw_brightness()
+        return after is not None and after >= 0.98
 
     def disable_pwm_safe(self):
         """Restores the physical backlight to whatever it was before
