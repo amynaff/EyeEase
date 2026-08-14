@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EyeEase — a kinder screen for your Mac</title>
-<meta name="description" content="Free, open-source blue-light and flicker filter for macOS and Windows. Warms your screen, holds the backlight steady, and never touches the network.">
+<meta name="description" content="Free, open-source blue-light and flicker filter for macOS. Warms your screen, holds the backlight steady, and never touches the network.">
 
 <meta property="og:title" content="EyeEase — a kinder screen for your Mac">
 <meta property="og:description" content="Warms your screen and holds the backlight steady. Free, open source, and it never touches the network.">
@@ -189,6 +189,21 @@ h1 .blue  { color: var(--blue); }
   color: var(--lens);
 }
 
+.firstrun {
+  max-width: 52ch;
+  margin: 26px auto 0;
+  padding: 16px 20px;
+  border: 1px solid #2a2a32;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  text-align: left;
+}
+.firstrun strong { color: var(--text); }
+.firstrun em { color: var(--text); font-style: normal; font-family: var(--mono); font-size: 0.86rem; }
+
 .caption {
   font-family: var(--mono);
   font-size: 12px;
@@ -244,7 +259,8 @@ footer a:hover { color: var(--text); }
     </p>
 
     <div class="actions">
-      <a class="btn btn-primary" href="https://github.com/amynaff/EyeEase/releases">
+      <a class="btn btn-primary"
+         href="https://github.com/amynaff/EyeEase/releases/latest/download/EyeEase-macOS.zip">
         Download for macOS
       </a>
       <a class="btn btn-ghost" href="https://github.com/amynaff/EyeEase">
@@ -253,8 +269,20 @@ footer a:hover { color: var(--text); }
     </div>
 
     <p class="meta">
-      macOS &amp; Windows &middot; Free &amp; open source &middot; v0.1.0 &middot;
+      macOS 11+ &middot; Apple silicon &middot; Free &amp; open source &middot; v0.1.0 &middot;
       <a href="#see">see it in action</a>
+    </p>
+
+    <!-- Sits under the button rather than in a FAQ nobody scrolls to. The
+         warning is alarming, it says the word malware, and someone meeting
+         it cold will assume the app is unsafe and delete it. -->
+    <p class="firstrun">
+      <strong>Opening it the first time:</strong> macOS will say it can't
+      check the app for malware. That's because it isn't signed with an Apple
+      certificate yet, not because anything is wrong with it — the source is
+      right there to read. Open <em>System&nbsp;Settings → Privacy&nbsp;&amp;
+      Security</em>, scroll down, and click <em>Open&nbsp;Anyway</em>. Once
+      only.
     </p>
   </section>
 

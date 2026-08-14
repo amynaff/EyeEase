@@ -1,4 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+#
+# Signing is driven by the environment so that an unsigned local build and a
+# release build come off the same spec. Set EYEEASE_CODESIGN_IDENTITY to the
+# full "Developer ID Application: ..." string to produce a notarisable app;
+# leave it unset and PyInstaller ad-hoc signs, which is fine for local runs
+# and is rejected by Gatekeeper anywhere else.
+import os
+
+CODESIGN_IDENTITY = os.environ.get("EYEEASE_CODESIGN_IDENTITY") or None
+ENTITLEMENTS = "entitlements.plist" if CODESIGN_IDENTITY else None
 
 a = Analysis(
     ["main.py"],
@@ -28,8 +38,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=CODESIGN_IDENTITY,
+    entitlements_file=ENTITLEMENTS,
 )
 
 coll = COLLECT(
