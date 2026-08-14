@@ -36,10 +36,10 @@ SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
 # Palette comes from brand.py so the panel, tray icon and app icon can't
 # drift apart. ACCENT/ACCENT_DIM are kept as local names because they read
-# better at the call sites than AMBER/AMBER_DIM do.
-ACCENT = brand.AMBER
-ACCENT_HOVER = brand.AMBER_BRIGHT
-ACCENT_DIM = brand.AMBER_DIM
+# better at the call sites than LENS/LENS_DIM do.
+ACCENT = brand.LENS
+ACCENT_HOVER = brand.LENS_BRIGHT
+ACCENT_DIM = brand.LENS_DIM
 INK = brand.INK
 
 # The off state has its own colour rather than a grey. See brand.py for
@@ -460,7 +460,7 @@ class EyeEaseApp(ctk.CTk):
 
         # Two plain buttons rather than CTkSegmentedButton: that widget uses
         # one text colour for every segment, so whatever reads well on the
-        # amber selection is unreadable on the dark unselected one. This is
+        # accent-coloured selection is unreadable on the dark unselected one. This is
         # the same active/inactive treatment the presets row uses.
         mode_row = ctk.CTkFrame(box, fg_color="transparent")
         mode_row.pack(fill="x", padx=14, pady=(10, 0))

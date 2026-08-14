@@ -8,7 +8,7 @@ import sys
 
 import pystray
 
-from brand import AMBER, BLUE, disc_icon
+from brand import BLUE, LENS, disc_icon
 
 # Big enough that both menu bars downsample it cleanly; small enough that
 # redrawing it on every on/off click costs nothing worth measuring.
@@ -23,7 +23,7 @@ def make_icon_image(is_on: bool):
     from brand.disc_icon() rather than loaded from assets/icon.png, because
     a PNG on disk can only ever be one of the two states.
     """
-    return disc_icon(TRAY_ICON_SIZE, AMBER if is_on else BLUE)
+    return disc_icon(TRAY_ICON_SIZE, LENS if is_on else BLUE)
 
 
 def run_tray(app):

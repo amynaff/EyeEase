@@ -18,7 +18,7 @@ ASSETS = Path(__file__).parent
 # run directly — add it so the shared brand definitions can be imported.
 sys.path.insert(0, str(ASSETS.parent))
 
-from brand import AMBER, disc_icon  # noqa: E402
+from brand import LENS, disc_icon  # noqa: E402
 
 SIZE = 1024
 
@@ -26,12 +26,12 @@ SIZE = 1024
 def build_icon() -> Image.Image:
     """The bundle icon — Finder, the Dock, the installer.
 
-    Always amber, unlike the menu-bar icon, which switches to blue while the
+    Always the lens colour, unlike the menu-bar icon, which goes blue while the
     app is off. This one is the app's identity rather than its state: it is
     mostly seen when the app isn't running at all, so there'd be no state for
     it to report even if it wanted to.
     """
-    return disc_icon(SIZE, AMBER)
+    return disc_icon(SIZE, LENS)
 
 
 def save_png(img: Image.Image):
