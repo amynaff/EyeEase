@@ -242,11 +242,46 @@ backlight started below 98%, so on a display already at full, setting it to
 full again "succeeded" and a completely dead write path passed for a working
 PWM-safe mode.
 
-`hold_pwm_safe()` re-asserts the lock on the app's 30-second tick, because
+`hold_pwm_safe()` re-asserts the lock on its own 2-second timer, because
 "locked to 100%" was otherwise only true for the instant the switch was
 flipped. If the backlight slips and can't be put back, the switch turns
 itself off with "lost control of backlight" rather than continuing to claim
 a lock it doesn't have.
+
+It used to ride the same 30-second tick as the auto schedule, which is the
+right cadence for a 45-minute fade and much too loose for this. Measured on
+a build: press a brightness key and the backlight sat at 30% — PWM flicker
+and all — for 14 seconds before the tick took it back. Fourteen seconds of
+the exact thing the mode exists to prevent. It costs one backlight read
+every 2 seconds instead, and nothing while the mode is off.
+
+### Giving the screen back when the app dies
+The colour half needs no help: macOS resets the gamma table when the process
+that set it exits, so even a `kill -9` leaves the screen untinted. The
+backlight is a persistent system setting and has no such safety net, so the
+app covers the exits one at a time:
+
+| how it dies | what catches it |
+| --- | --- |
+| tray menu "Quit" | `on_close()` |
+| `kill`, Activity Monitor "Quit", the SIGTERM phase of logout/shutdown | signal handlers in `main.py` |
+| normal interpreter exit | `atexit` |
+| SIGKILL — Force Quit, `kill -9` | nothing can. Repaired on next launch |
+
+That last row is not a gap that can be closed from inside the process, so it
+is closed from outside it: `enable_pwm_safe()` writes the displaced level
+straight to the settings file (synchronously — the usual 400ms debounce is
+400ms in which a kill loses the one value needed to undo the lock), and the
+next launch puts it back. The repair only fires if the backlight is still
+sitting at 100% where the lock left it. Anyone who has already turned their
+brightness down by hand has said what they want more recently than that file
+has.
+
+Worth knowing that `osascript -e 'quit app "EyeEase"'` lands in the SIGKILL
+row rather than the SIGTERM one — the app isn't scriptable, so the quit
+escalates straight to a kill. Verified by instrumenting a build: `atexit`,
+the signal handlers and an `NSApplicationWillTerminateNotification` observer
+all registered, and none of the three fired.
 
 ## Packaging into a real .app (macOS)
 Use the same Tk-capable `python3` called out in Setup above — PyInstaller

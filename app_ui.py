@@ -11,6 +11,7 @@ backwards (6500 neutral down to 1200 deep amber), which feels wrong under a
 finger. intensity_to_kelvin() below is the only place that mapping lives.
 """
 
+import atexit
 import json
 import os
 import customtkinter as ctk
@@ -71,6 +72,16 @@ TRANSITION_STEPS = 16
 # just to never be visibly behind.
 TICK_MS = 30_000
 
+# The backlight lock re-asserts on its own timer rather than riding the tick
+# above. 30 seconds is the right cadence for a 45-minute fade and far too
+# loose for this: pressing a brightness key hands you back PWM flicker, and
+# measured on a build, the backlight sat at 30% for 14 seconds before the
+# tick took it back. For someone who turned this mode on *because* flicker
+# hurts, 14 seconds of it is the failure the feature exists to prevent.
+# Costs one backlight read per interval, and nothing at all while the mode
+# is off — _hold_pwm_safe() returns before touching the display.
+HOLD_MS = 2_000
+
 # Fixed width; height is measured from the content in _fit_to_content().
 PANEL_WIDTH = 360
 
@@ -101,6 +112,11 @@ def load_settings():
         # the mode off a week later still gives back the right warmth.
         "before_zero_blue": None,
         "pwm_safe": False,
+        # The backlight level the lock displaced, written to disk the moment
+        # the lock engages. A SIGKILL runs no cleanup code of any kind, so
+        # this is the only way the level survives one — see
+        # _repair_backlight_after_crash().
+        "backlight_before_lock": None,
         "auto": False,
         "schedule": Schedule().to_dict(),
     }
@@ -141,6 +157,7 @@ class EyeEaseApp(ctk.CTk):
         self._anim_job = None
         self._save_job = None
         self._tick_job = None
+        self._hold_job = None
 
         # Window position is tracked by hand because a borderless window has
         # to be re-positioned after overrideredirect(), and dragging it is
@@ -152,6 +169,9 @@ class EyeEaseApp(ctk.CTk):
         # Set once the menu-bar icon exists; until then the mark can't
         # follow the state because there's nothing to re-draw.
         self._tray_icon = None
+        # Parked by tray.py; see _restore_display_on_terminate() for why it
+        # has to be held rather than discarded.
+        self.terminate_observer = None
 
         self.title("EyeEase")
         self.geometry(f"{PANEL_WIDTH}x600+{self._window_x}+{self._window_y}")
@@ -159,12 +179,24 @@ class EyeEaseApp(ctk.CTk):
         self.configure(fg_color=BG)
         self.attributes("-topmost", True)  # small utility window stays on top
 
+        # The screen is a system-wide setting this process borrowed. If the
+        # process dies without on_close() running, restore_display() is the
+        # last line of defence — see its docstring for why the backlight
+        # needs one and the colour doesn't.
+        atexit.register(self.restore_display)
+
+        # Before the UI, because building it probes the backlight — and the
+        # probe would read a level this may be about to correct.
+        self._repair_backlight_after_crash()
+
         self._build_ui()
         self._fit_to_content()
         if self.settings["pwm_safe"] and self.pwm_switch is not None:
             # Restore the saved mode, but only if the hardware still allows
             # it — otherwise correct the switch rather than lie about it.
-            if not self.gamma.enable_pwm_safe():
+            if self.gamma.enable_pwm_safe():
+                self._remember_backlight()
+            else:
                 self.settings["pwm_safe"] = False
                 self.pwm_switch.deselect()
                 self.pwm_note.configure(text="can't hold this backlight")
@@ -853,14 +885,21 @@ class EyeEaseApp(ctk.CTk):
                 self._update_schedule_row()
                 if self._anim_job is None:
                     self._apply_current()
-            self._hold_pwm_safe()
 
         self._tick_job = self.after(TICK_MS, tick)
 
+        def hold():
+            self._hold_job = self.after(HOLD_MS, hold)
+            self._hold_pwm_safe()
+
+        self._hold_job = self.after(HOLD_MS, hold)
+
     def _stop_ticking(self):
-        if self._tick_job is not None:
-            self.after_cancel(self._tick_job)
-            self._tick_job = None
+        for attribute in ("_tick_job", "_hold_job"):
+            job = getattr(self, attribute)
+            if job is not None:
+                self.after_cancel(job)
+                setattr(self, attribute, None)
 
     def _effective_values(self):
         """The values to actually send to the screen right now.
@@ -977,6 +1016,41 @@ class EyeEaseApp(ctk.CTk):
         for button in self.preset_buttons.values():
             button.configure(state=state)
 
+    def _remember_backlight(self):
+        """Write the displaced level straight to disk, not via _queue_save().
+
+        The debounce is 400ms, which is 400ms in which a kill loses the one
+        value needed to undo the lock. This is the single write in the app
+        worth doing synchronously.
+        """
+        self.settings["backlight_before_lock"] = self.gamma._saved_hw_brightness
+        save_settings(self.settings)
+
+    def _repair_backlight_after_crash(self):
+        """Undo a lock left behind by a previous run that was killed.
+
+        SIGKILL is uncatchable, so no exit hook can help: Force Quit, or
+        `osascript -e 'quit app "EyeEase"'` on this app (it isn't scriptable,
+        so the quit escalates to a kill), and the backlight simply stays
+        pinned at 100% forever. The next launch is the only place left to
+        fix it.
+
+        Only acts if the backlight is still sitting where the lock left it.
+        Someone who has already turned their brightness back down since then
+        has said what they want more recently than this file has, and yanking
+        them to a stale level would be its own bug.
+        """
+        saved = self.settings.get("backlight_before_lock")
+        if saved is None:
+            return
+
+        current = self.gamma._get_hw_brightness()
+        if current is not None and current >= 0.98:
+            self.gamma._set_hw_brightness(saved)
+
+        self.settings["backlight_before_lock"] = None
+        save_settings(self.settings)
+
     def _toggle_pwm_safe(self):
         turning_on = self.pwm_switch.get() == 1
         if turning_on:
@@ -989,8 +1063,10 @@ class EyeEaseApp(ctk.CTk):
                 turning_on = False
             else:
                 self.pwm_note.configure(text="backlight held steady")
+                self._remember_backlight()
         else:
             self.gamma.disable_pwm_safe()
+            self._remember_backlight()
             self.pwm_note.configure(text="")
         self.settings["pwm_safe"] = turning_on
         if self.settings["zero_blue"]:
@@ -1173,6 +1249,31 @@ class EyeEaseApp(ctk.CTk):
             self.gamma_warning.pack_forget()
         self._fit_to_content()
 
+    def restore_display(self):
+        """Give the screen back. Touches no Tk, and is safe to call twice.
+
+        The colour half looks after itself: macOS resets the gamma table when
+        the process that set it dies, so a crash or a kill -9 leaves the
+        screen untinted on its own.
+
+        The backlight does not. It's a persistent system setting, and nothing
+        puts it back — measured on a build, quitting by Apple Event (which is
+        also what a logout or a Force Quit does) left the panel pinned at
+        100% with the saved 45% never restored. Someone who turned this mode
+        on because bright, flickering screens hurt should not log back in to
+        a display at full blast.
+
+        Deliberately Tk-free: this runs from atexit and from a signal
+        handler, both of which can fire after the window is destroyed.
+        """
+        try:
+            self.gamma.disable_pwm_safe()  # no-ops when the lock isn't held
+            self.gamma.reset()
+        except Exception:
+            # Nothing useful to do while the process is on its way out, and
+            # raising here would replace a clean exit with a traceback.
+            pass
+
     def on_close(self):
         """Call this before quitting so the screen doesn't stay tinted."""
         self._cancel_animation()
@@ -1180,8 +1281,7 @@ class EyeEaseApp(ctk.CTk):
         if self._save_job is not None:
             self.after_cancel(self._save_job)
             self._save_job = None
-        self.gamma.reset()
-        if self.settings["pwm_safe"]:
-            self.gamma.disable_pwm_safe()
+        self.restore_display()
+        self.settings["backlight_before_lock"] = None
         save_settings(self.settings)
         self.destroy()

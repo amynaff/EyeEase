@@ -4,6 +4,8 @@ shows/hides the control panel, matching how RedShift and EyeEase both live
 in the tray rather than the dock/taskbar.
 """
 
+import sys
+
 import pystray
 
 from brand import AMBER, BLUE, disc_icon
@@ -57,4 +59,39 @@ def run_tray(app):
     # Done here rather than in main.py because run_detached() is the point
     # after which the status item exists and can be re-drawn.
     app.attach_tray(icon)
+    _restore_display_on_terminate(app)
     return icon
+
+
+def _restore_display_on_terminate(app):
+    """Catch the one way of quitting that skips every Python exit path.
+
+    A quit Apple Event — what a logout, a Force Quit, or `osascript -e 'quit
+    app "EyeEase"'` sends — tears the process down through NSApplication
+    without running `atexit` handlers or delivering SIGTERM. Measured on a
+    build: both were installed, neither fired, and the backlight stayed
+    pinned at 100% with the user's own level never restored.
+
+    NSApplication does post this notification on its way out, and pystray
+    has already stood an NSApplication up by this point, so there's
+    something to observe. This is the only hook that covers that exit.
+
+    The returned token is parked on the app because NSNotificationCenter
+    doesn't retain block observers — dropping it unregisters the observer.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplicationWillTerminateNotification
+        from Foundation import NSNotificationCenter
+    except ImportError:
+        return  # no pyobjc: one fewer exit path covered, not a failure
+
+    app.terminate_observer = (
+        NSNotificationCenter.defaultCenter().addObserverForName_object_queue_usingBlock_(
+            NSApplicationWillTerminateNotification,
+            None,
+            None,
+            lambda _notification: app.restore_display(),
+        )
+    )
