@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EyeEase — a kinder screen for your Mac</title>
+<meta name="description" content="Free, open-source blue-light and flicker filter for macOS and Windows. Warms your screen, holds the backlight steady, and never touches the network.">
+
+<meta property="og:title" content="EyeEase — a kinder screen for your Mac">
+<meta property="og:description" content="Warms your screen and holds the backlight steady. Free, open source, and it never touches the network.">
+<meta property="og:type" content="website">
+
+<style>
+/* Palette is lifted straight from the app's brand.py, so the site and the
+   product can't drift apart. Amber is what EyeEase makes at evening
+   temperatures; blue is the light it takes away. */
+:root {
+  --bg: #0b0b0d;
+  --surface: #17171b;
+  --surface-hi: #232329;
+  --text: #f2f2f4;
+  --muted: #8a8a94;
+  --amber: #ffa759;
+  --amber-bright: #fec28c;
+  --blue: #7ac1ff;
+  --ink: #3f1d00;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- hero ---------- */
+.hero { padding: clamp(72px, 14vh, 140px) 0 clamp(48px, 8vh, 88px); text-align: center; }
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 28px;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 8.5vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  margin: 0 0 28px;
+}
+
+/* The two halves of the promise, each in the colour it refers to. */
+h1 .amber { color: var(--amber); }
+h1 .blue  { color: var(--blue); }
+
+.lede {
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  color: #c9c9d1;
+  max-width: 46ch;
+  margin: 0 auto 38px;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 30px;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.btn-primary { background: var(--amber); color: var(--ink); }
+.btn-primary:hover { background: var(--amber-bright); }
+.btn-ghost { border-color: #34343c; color: var(--text); }
+.btn-ghost:hover { border-color: var(--muted); background: var(--surface); }
+
+.btn:focus-visible,
+.slider:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 30px 0 0;
+}
+.meta a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.meta a:hover { color: var(--text); }
+
+/* ---------- demo ---------- */
+.demo { padding: clamp(40px, 7vh, 72px) 0; }
+
+.screen {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2a2a32;
+  /* A light surface, because that's where a warm tint is actually visible.
+     Multiplying amber over a near-black page would show almost nothing. */
+  background: #f4f1ec;
+  aspect-ratio: 16 / 10;
+}
+
+/* The tint sits on top and multiplies, which is what a gamma ramp does to
+   every pixel on the way out. Same idea, same maths — see setTint(). */
+.tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  background: #fff;
+  pointer-events: none;
+}
+
+/* A neutral mock of "some window on a screen" — no real app imitated. */
+.mock { padding: 7% 7% 0; height: 100%; }
+.bar { display: flex; gap: 7px; margin-bottom: 7%; }
+.dot { width: 11px; height: 11px; border-radius: 50%; background: #d3cec6; }
+.line { height: 11px; border-radius: 6px; background: #d9d4cc; margin-bottom: 3.4%; }
+.line.head { height: 19px; width: 52%; background: #b8b2a8; margin-bottom: 6%; }
+.line.w90 { width: 90%; } .line.w75 { width: 75%; } .line.w82 { width: 82%; }
+.line.w60 { width: 60%; } .line.w40 { width: 40%; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.controls label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.slider {
+  flex: 1 1 220px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #6f6f7a, var(--amber));
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  cursor: pointer;
+}
+
+.readout {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 8ch;
+  text-align: right;
+  color: var(--amber);
+}
+
+.caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin: 14px 0 0;
+  text-align: center;
+}
+
+/* ---------- features ---------- */
+.features { padding: clamp(40px, 7vh, 80px) 0 clamp(64px, 10vh, 110px); }
+.rule { border: 0; border-top: 1px solid #24242b; margin: 0 0 8px; }
+
+.feature {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 8px 18px;
+  align-items: baseline;
+  padding: 26px 0;
+  border-bottom: 1px solid #1c1c22;
+}
+.feature .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.feature h3 { margin: 0; font-size: 1.12rem; font-weight: 650; letter-spacing: -0.01em; }
+.feature p { margin: 8px 0 0; color: var(--muted); grid-column: 2; font-size: 0.97rem; }
+
+/* ---------- footer ---------- */
+footer {
+  padding: 40px 0 64px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+footer a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+footer a:hover { color: var(--text); }
+
+/* An app for eye comfort has no business animating aggressively, and no
+   business ignoring this. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<main>
+  <section class="hero wrap">
+    <p class="kicker">Blue-light &amp; flicker filter for macOS</p>
+    <h1>Your Mac,<br><span class="amber">warmer</span> and <span class="blue">steadier</span>.</h1>
+    <p class="lede">
+      EyeEase warms your screen past where Night Shift stops, and holds the
+      backlight at 100% so it can't flicker while you dim. Two sliders, three
+      presets, and one switch that takes blue to zero.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/amynaff/EyeEase/releases">
+        Download for macOS
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/amynaff/EyeEase">
+        View on GitHub ↗
+      </a>
+    </div>
+
+    <p class="meta">
+      macOS &amp; Windows &middot; Free &amp; open source &middot; v0.1.0 &middot;
+      <a href="#see">see it in action</a>
+    </p>
+  </section>
+
+  <section class="demo wrap" id="see">
+    <div class="screen">
+      <div class="mock">
+        <div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+        <div class="line head"></div>
+        <div class="line w90"></div>
+        <div class="line w75"></div>
+        <div class="line w82"></div>
+        <div class="line w60"></div>
+        <div class="line w90"></div>
+        <div class="line w40"></div>
+      </div>
+      <div class="tint" id="tint"></div>
+    </div>
+
+    <div class="controls">
+      <label for="warmth">Warmth</label>
+      <input class="slider" type="range" id="warmth" min="0" max="100" value="45"
+             aria-describedby="readout">
+      <output class="readout" id="readout">4000K</output>
+    </div>
+    <p class="caption">
+      Drag it. This runs the same blackbody maths the app uses — at the far end,
+      the blue channel is zero.
+    </p>
+  </section>
+
+  <section class="features wrap">
+    <hr class="rule">
+
+    <div class="feature">
+      <span class="num">01</span>
+      <h3>Zero blue, zero flicker</h3>
+      <p>
+        One switch. The blue channel is written as literal zeros, not merely
+        turned down, and the backlight is pinned so nothing strobes while the
+        dimming happens in software.
+      </p>
+    </div>
+
+    <div class="feature">
+      <span class="num">02</span>
+      <h3>Warms itself on a schedule</h3>
+      <p>
+        Fixed hours, or real sunset and sunrise from your coordinates — worked
+        out on your machine with a bit of astronomy, not fetched from anyone.
+      </p>
+    </div>
+
+    <div class="feature">
+      <span class="num">03</span>
+      <h3>Never touches the network</h3>
+      <p>
+        No accounts, no analytics, no update pings. There is not a single
+        network call in the source, which you are welcome to go and check.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  Made by <a href="https://github.com/amynaff">amynaff</a> &middot;
+  <a href="https://github.com/amynaff/EyeEase">source on GitHub</a>
+</footer>
+
+<script>
+// Tanner Helland's Planckian approximation — the same one gamma.py uses, so
+// the demo warms exactly the way the app does rather than approximately.
+function planckian(kelvin) {
+  const t = Math.max(1000, Math.min(40000, kelvin)) / 100;
+  let r, g, b;
+
+  if (t <= 66) {
+    r = 255;
+    g = 99.4708025861 * Math.log(t) - 161.1195681661;
+  } else {
+    r = 329.698727446 * Math.pow(t - 60, -0.1332047592);
+    g = 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+  }
+
+  if (t >= 66) b = 255;
+  else if (t <= 19) b = 0;   // below ~1900K a blackbody emits no blue at all
+  else b = 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+
+  const clamp = v => Math.max(0, Math.min(255, v));
+  return [clamp(r), clamp(g), clamp(b)];
+}
+
+// Normalised against 6500K so the neutral end is a screen we haven't touched.
+function kelvinToRGB(kelvin) {
+  const [r, g, b] = planckian(kelvin);
+  const [nr, ng, nb] = planckian(6500);
+  return [r / nr, g / ng, b / nb];
+}
+
+const KELVIN_MAX = 6500, KELVIN_MIN = 1200;
+const slider  = document.getElementById('warmth');
+const tint    = document.getElementById('tint');
+const readout = document.getElementById('readout');
+
+function setTint() {
+  const intensity = slider.value / 100;
+  const kelvin = KELVIN_MAX - intensity * (KELVIN_MAX - KELVIN_MIN);
+  const [r, g, b] = kelvinToRGB(kelvin);
+
+  tint.style.background =
+    `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+
+  // Same call the app's own readout makes: past the point where blue is
+  // gone, the number is no longer the interesting fact.
+  readout.textContent = b === 0 ? 'NO BLUE' : `${Math.round(kelvin / 50) * 50}K`;
+  readout.style.color = `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+}
+
+slider.addEventListener('input', setTint);
+setTint();
+</script>
+
+</body>
+</html>
