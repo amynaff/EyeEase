@@ -29,6 +29,7 @@ from auto_schedule import (
 )
 import brand
 import startup
+import tray
 
 SETTINGS_PATH = os.path.expanduser("~/.eyeease_settings.json")
 
@@ -39,6 +40,12 @@ ACCENT = brand.AMBER
 ACCENT_HOVER = brand.AMBER_BRIGHT
 ACCENT_DIM = brand.AMBER_DIM
 INK = brand.INK
+
+# The off state has its own colour rather than a grey. See brand.py for
+# where the blue comes from and why a blue is safe here specifically.
+OFF = brand.BLUE
+OFF_HOVER = brand.BLUE_BRIGHT
+OFF_INK = brand.BLUE_INK
 BG = brand.BG
 SURFACE = brand.SURFACE
 SURFACE_HI = brand.SURFACE_HI
@@ -89,6 +96,10 @@ def load_settings():
         "intensity": 0.6,
         "brightness": 0.8,
         "is_on": True,
+        "zero_blue": False,
+        # What zero-blue mode displaced, kept across restarts so switching
+        # the mode off a week later still gives back the right warmth.
+        "before_zero_blue": None,
         "pwm_safe": False,
         "auto": False,
         "schedule": Schedule().to_dict(),
@@ -138,6 +149,9 @@ class EyeEaseApp(ctk.CTk):
         self._drag_offset = None
         self._chrome_stripped = False
         self._gamma_failed = False
+        # Set once the menu-bar icon exists; until then the mark can't
+        # follow the state because there's nothing to re-draw.
+        self._tray_icon = None
 
         self.title("EyeEase")
         self.geometry(f"{PANEL_WIDTH}x600+{self._window_x}+{self._window_y}")
@@ -154,6 +168,13 @@ class EyeEaseApp(ctk.CTk):
                 self.settings["pwm_safe"] = False
                 self.pwm_switch.deselect()
                 self.pwm_note.configure(text="can't hold this backlight")
+        if self.settings["zero_blue"]:
+            # Restored rather than re-toggled: enter_zero_blue() would park
+            # the mode's own values as if they were the user's.
+            self.zero_blue_switch.select()
+            holding = self._enable_pwm_for_zero_blue()
+            self.zero_blue_note.configure(text=self._zero_blue_note(holding))
+            self._sync_zero_blue_controls()
         self._apply_current()
         self._start_ticking()
         # Deferred so the window is mapped first — see _strip_chrome().
@@ -169,6 +190,16 @@ class EyeEaseApp(ctk.CTk):
         """
         self.update_idletasks()
         height = self.winfo_reqheight()
+
+        # Fitting the height to the content only helps if the result is
+        # somewhere you can see it. Each option row adds ~60px, and the
+        # panel opens 90px down by default — enough rows and the EASE
+        # button ends up below the bottom of a laptop screen, on a window
+        # with no title bar to drag it back by.
+        lowest = self.winfo_screenheight() - height - 12
+        if self._window_y > lowest:
+            self._window_y = max(12, lowest)
+
         self.geometry(f"{PANEL_WIDTH}x{height}+{self._window_x}+{self._window_y}")
 
     # -- window chrome ---------------------------------------------------
@@ -564,12 +595,23 @@ class EyeEaseApp(ctk.CTk):
         # the option simply isn't offered.
         self._backlight_controllable = self.gamma.can_control_backlight()
 
+        # Sits above the individual switches because it drives them: it is
+        # the whole promise in one flip, and the two rows under it are the
+        # same thing taken apart for anyone who wants only half of it.
+        self.zero_blue_switch, self.zero_blue_note = self._add_option_row(
+            card,
+            "Zero blue, zero flicker",
+            self._toggle_zero_blue,
+            first=True,
+            description="Blue channel off entirely, backlight held steady",
+        )
+
         if self._backlight_controllable:
             self.pwm_switch, self.pwm_note = self._add_option_row(
                 card,
                 "No-flicker dimming",
                 self._toggle_pwm_safe,
-                first=True,
+                first=False,
                 description="Holds the backlight steady and dims in software",
             )
             if self.settings["pwm_safe"]:
@@ -586,7 +628,7 @@ class EyeEaseApp(ctk.CTk):
                 card,
                 "Launch at login",
                 self._toggle_login,
-                first=not self._backlight_controllable,
+                first=False,
             )
             # Read from the OS, never from saved settings — someone may have
             # removed the login item by hand since last run, and the switch
@@ -663,8 +705,8 @@ class EyeEaseApp(ctk.CTk):
             size=(22, 22),
         )
         self.eye_mark_off = ctk.CTkImage(
-            light_image=brand.eye_image(22, TEXT_MUTED, SURFACE_HI),
-            dark_image=brand.eye_image(22, TEXT_MUTED, SURFACE_HI),
+            light_image=brand.eye_image(22, OFF_INK, OFF),
+            dark_image=brand.eye_image(22, OFF_INK, OFF),
             size=(22, 22),
         )
 
@@ -850,7 +892,90 @@ class EyeEaseApp(ctk.CTk):
         self.settings["pwm_safe"] = False
         self.pwm_switch.deselect()
         self.pwm_note.configure(text="lost control of backlight")
+        if self.settings["zero_blue"]:
+            self.zero_blue_note.configure(text=self._zero_blue_note(False))
         self._queue_save()
+
+    # -- zero blue -------------------------------------------------------
+    # One switch for the two halves of "nothing on this screen is hurting
+    # my eyes": no blue in the ramp, and a backlight that isn't strobing
+    # while it dims. They're separate mechanisms with separate failure
+    # modes, so the note under the switch says which half is actually in
+    # force rather than implying both always are.
+
+    def _enable_pwm_for_zero_blue(self) -> bool:
+        """Turn the backlight lock on as part of the mode. Returns whether
+        the lock is in force, which is not the same as whether we asked."""
+        if self.pwm_switch is None:
+            return False
+        if self.settings["pwm_safe"]:
+            return True
+        self.pwm_switch.select()
+        self._toggle_pwm_safe()  # deselects itself again if it can't hold
+        return self.settings["pwm_safe"]
+
+    def _zero_blue_note(self, holding: bool) -> str:
+        """Say which half of the promise is real on this machine.
+
+        A laptop whose backlight we can't drive still gets the colour half,
+        and that's worth having — but claiming "no flicker" there would be
+        the exact lie the probe in gamma.py exists to prevent.
+        """
+        if holding:
+            return "no blue, backlight steady"
+        if self.pwm_switch is None:
+            return "no blue — backlight isn't ours to hold"
+        return "no blue — can't hold this backlight"
+
+    def _toggle_zero_blue(self):
+        turning_on = self.zero_blue_switch.get() == 1
+
+        if turning_on:
+            self.settings["before_zero_blue"] = {
+                "intensity": self.settings["intensity"],
+                "pwm_safe": self.settings["pwm_safe"],
+            }
+            self.settings["zero_blue"] = True
+            holding = self._enable_pwm_for_zero_blue()
+            self.zero_blue_note.configure(text=self._zero_blue_note(holding))
+            # The ramp ignores the slider in this mode; move it so the panel
+            # doesn't sit there showing a warmth the screen isn't at.
+            self.warmth_slider.set(1.0)
+            self.settings["intensity"] = 1.0
+        else:
+            self.settings["zero_blue"] = False
+            self.zero_blue_note.configure(text="")
+            before = self.settings["before_zero_blue"] or {}
+            # Only undo the lock if the mode is what turned it on — someone
+            # who had no-flicker dimming on beforehand keeps it.
+            if (
+                self.pwm_switch is not None
+                and self.settings["pwm_safe"]
+                and not before.get("pwm_safe")
+            ):
+                self.pwm_switch.deselect()
+                self._toggle_pwm_safe()
+            if before.get("intensity") is not None:
+                self.settings["intensity"] = before["intensity"]
+                self.warmth_slider.set(before["intensity"])
+            self.settings["before_zero_blue"] = None
+
+        self._sync_zero_blue_controls()
+        self._cancel_animation()
+        self._apply_current()
+        self._queue_save()
+
+    def _sync_zero_blue_controls(self):
+        """Grey out the controls the mode has taken over.
+
+        Leaving them live would let a preset quietly set a temperature that
+        the ramp then overrides — the click would look like it worked and
+        change nothing on screen.
+        """
+        state = "disabled" if self.settings["zero_blue"] else "normal"
+        self.warmth_slider.configure(state=state)
+        for button in self.preset_buttons.values():
+            button.configure(state=state)
 
     def _toggle_pwm_safe(self):
         turning_on = self.pwm_switch.get() == 1
@@ -868,6 +993,11 @@ class EyeEaseApp(ctk.CTk):
             self.gamma.disable_pwm_safe()
             self.pwm_note.configure(text="")
         self.settings["pwm_safe"] = turning_on
+        if self.settings["zero_blue"]:
+            # Turning the backlight row off by hand halves the mode above
+            # it. Say so there too, or that switch keeps promising no
+            # flicker while the backlight has gone back to dimming itself.
+            self.zero_blue_note.configure(text=self._zero_blue_note(turning_on))
         self._queue_save()
 
     # -- transitions -----------------------------------------------------
@@ -902,7 +1032,9 @@ class EyeEaseApp(ctk.CTk):
                 self.settings["brightness"] = cur_b
                 self._refresh_readouts(cur_i, cur_b)
 
-            self.gamma.apply(intensity_to_kelvin(cur_i), cur_b)
+            self.gamma.apply(
+                intensity_to_kelvin(cur_i), cur_b, self.settings["zero_blue"]
+            )
 
             if n < TRANSITION_STEPS:
                 self._anim_job = self.after(
@@ -929,6 +1061,19 @@ class EyeEaseApp(ctk.CTk):
             brightness = self.brightness_slider.get()
 
         kelvin = intensity_to_kelvin(intensity)
+        if self.settings["zero_blue"]:
+            # A Kelvin number would undersell it: 1200K is a temperature the
+            # slider can reach on its own, and the point of the mode is the
+            # channel that is gone rather than the one it sits nearest.
+            self.warmth_readout.configure(
+                text="NO BLUE", text_color=kelvin_to_hex(KELVIN_MIN, zero_blue=True)
+            )
+            self.brightness_readout.configure(
+                text=f"{int(round(brightness * 100))}%"
+            )
+            self._update_preset_highlight(kelvin, brightness)
+            return
+
         self.warmth_readout.configure(
             text=f"{int(round(kelvin / 50) * 50)}K",
             # The number is drawn in the tint it describes, which is the whole
@@ -947,7 +1092,8 @@ class EyeEaseApp(ctk.CTk):
         for name, button in self.preset_buttons.items():
             preset = PRESETS[name]
             active = (
-                abs(kelvin - preset["kelvin"]) < 60
+                not self.settings["zero_blue"]
+                and abs(kelvin - preset["kelvin"]) < 60
                 and abs(brightness - preset["brightness"]) < 0.02
                 and self.settings["is_on"]
             )
@@ -956,16 +1102,32 @@ class EyeEaseApp(ctk.CTk):
                 text_color=TEXT if active else TEXT_MUTED,
             )
 
+    def attach_tray(self, icon):
+        """Called by tray.py once the menu-bar item exists."""
+        self._tray_icon = icon
+        self._update_tray_icon()
+
+    def _update_tray_icon(self):
+        if self._tray_icon is None:
+            return
+        try:
+            self._tray_icon.icon = tray.make_icon_image(self.settings["is_on"])
+        except Exception:
+            # A menu-bar icon that won't re-draw is not a reason to take the
+            # app down with it — the panel is still the real control.
+            pass
+
     def _update_power_state(self):
         on = self.settings["is_on"]
         self.power_button.configure(
             text="EASE ON" if on else "EASE OFF",
             image=self.eye_mark_on if on else self.eye_mark_off,
-            fg_color=ACCENT if on else SURFACE_HI,
-            text_color=INK if on else TEXT_MUTED,
-            hover_color=ACCENT_HOVER if on else SURFACE_HI,
+            fg_color=ACCENT if on else OFF,
+            text_color=INK if on else OFF_INK,
+            hover_color=ACCENT_HOVER if on else OFF_HOVER,
         )
         self.status_dot.configure(text_color=ACCENT if on else ACCENT_DIM)
+        self._update_tray_icon()
 
     # -- persistence -----------------------------------------------------
     def _queue_save(self):
@@ -983,7 +1145,9 @@ class EyeEaseApp(ctk.CTk):
     def _apply_current(self):
         if self.settings["is_on"]:
             intensity, brightness = self._effective_values()
-            applied = self.gamma.apply(intensity_to_kelvin(intensity), brightness)
+            applied = self.gamma.apply(
+                intensity_to_kelvin(intensity), brightness, self.settings["zero_blue"]
+            )
         else:
             applied = self.gamma.reset()
         self._show_gamma_warning(not applied)

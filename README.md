@@ -73,7 +73,31 @@ A small panel appears with:
   neutral during the day and slides toward those values across the fade, and
   the status line says which of those is happening right now. Presets still
   work — they move the night target. The EASE button still wins outright.
-- **No-flicker dimming** — most screens dim by switching the backlight fully
+- **Zero blue, zero flicker** — one switch for the two things that make a
+  screen hurt, done as hard as software can do them. The blue ramp is written
+  as literal zeros (not "very warm", not 1900K — zero), the temperature is
+  pinned to the warmest end so green comes down the blackbody curve with it
+  and the result reads as candle-amber rather than sickly green, and the
+  backlight is locked to 100% so nothing is strobing while the dimming
+  happens in the ramp. The warmth slider and presets grey out while it's on,
+  because the ramp is ignoring them and a preset that silently does nothing
+  is worse than a preset you can't click.
+
+  The two halves fail separately, so the line under the switch says which
+  one you're actually getting: *"no blue, backlight steady"* when both are
+  in force, *"no blue — can't hold this backlight"* when only the colour
+  half is. Switching the mode off puts back the warmth and the backlight
+  setting you had before it — including across a restart, since the
+  displaced values are saved alongside the mode.
+
+  **What "zero blue" honestly means.** Zero blue *out of the gamma ramp*,
+  which is the whole of what any software on any OS controls. An LCD
+  backlight is a blue LED behind a phosphor, and a little of that blue leaks
+  through the red and green subpixel filters no matter what the GPU sends.
+  Removing the rest is a job for the panel, not for this app.
+- **No-flicker dimming** — the backlight half of the mode above, on its own
+  switch for anyone who wants a flicker-free backlight without the amber.
+  Most screens dim by switching the backlight fully
   on and off hundreds of times a second (pulse-width modulation). Your eye
   averages it into "dimmer"; a minority get headaches and eye strain from it,
   worst at low brightness. This holds the backlight at 100%, where there is
@@ -87,13 +111,30 @@ A small panel appears with:
   **The option is only shown when the backlight can actually be driven.** On
   startup the app nudges the brightness 5% and reads it back; if nothing
   moves, the row isn't built at all rather than offering a switch that could
-  only ever refuse. That is the case on macOS 26, where the private
-  CoreDisplay call accepts the write and does nothing — so on a current Mac
-  you won't see this option, and that's correct rather than broken.
+  only ever refuse. This used to hide the row on every current Mac, because
+  the app drove the backlight through `CoreDisplay`, which stopped working
+  somewhere before macOS 26. It now goes through `DisplayServices` first and
+  the row appears again — see the internals section for what changed.
 
   It was called "PWM-safe mode". The acronym meant nothing to anyone who
   hadn't already researched the problem, which is precisely the audience the
   feature exists for.
+- **The menu-bar icon shows the state** — amber while the app is easing the
+  screen, blue while it isn't. Blue is the light that reaches you when
+  nothing is filtering it, so the icon says what's happening to your screen
+  rather than which switch was pressed last. The EASE button in the panel
+  goes the same two colours.
+
+  Blue is otherwise a colour this app can't use: the gamma ramp takes the
+  blue channel to zero at deep warmth, so a blue accent would darken into an
+  unreadable smudge exactly when the app is working hardest (see the note at
+  the top of `brand.py`). It's safe *here* and nowhere else, because blue is
+  the off state, and off means the ramp has been reset — the colour is only
+  ever drawn on an untouched screen.
+
+  The bundle icon in Finder and the Dock stays amber. That one is the app's
+  identity rather than its state; it's mostly seen when the app isn't
+  running, so there'd be no state for it to report.
 - **Launch at login** — starts EyeEase when you log in. macOS gets a
   LaunchAgent plist in `~/Library/LaunchAgents`; Windows gets a value in the
   per-user `Run` key. Both are user-level, need no admin rights, and are a
@@ -178,12 +219,19 @@ reports success on current macOS and leaves the title bar in place, so it
 isn't used. If `overrideredirect()` ever fails the app keeps its title bar
 rather than refusing to start.
 
-The macOS side of PWM-safe mode uses `CoreDisplay`, an undocumented private
-framework (the same one tools like the `brightness` CLI rely on, since
-Apple's public IOKit brightness API stopped working for the internal panel
-on Apple Silicon). Private frameworks move or stop working across macOS
-versions without notice, and this one has: on macOS 26 the write call
-raises nothing, returns success, and changes nothing at all.
+The macOS side of no-flicker dimming drives the backlight through private
+frameworks, because Apple's public IOKit brightness API stopped working for
+the internal panel on Apple Silicon. Private frameworks move or stop working
+across macOS versions without notice, and the one this app started on has:
+measured on a MacBook Air (M4, macOS 26.5.2), `CoreDisplay`'s write call
+raises nothing, returns success and moves nothing, while its read reports a
+flat 1.0 with the panel plainly sitting at 45%. Both symbols still resolve,
+so nothing errors and nothing works.
+
+`DisplayServices` drives the same panel correctly on that machine, so it is
+tried first, with `CoreDisplay` kept underneath for older Macs where the
+reverse is true. Neither is trusted on its word — the probe below is what
+decides.
 
 There is no error to catch, so `enable_pwm_safe()` proves the backlight is
 drivable rather than assuming it. It nudges the brightness by 5% and reads

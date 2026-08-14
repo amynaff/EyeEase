@@ -11,47 +11,27 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 ASSETS = Path(__file__).parent
 # This script lives in assets/, so the repo root isn't on sys.path when it's
 # run directly — add it so the shared brand definitions can be imported.
 sys.path.insert(0, str(ASSETS.parent))
 
-from brand import AMBER, eye_lens_mask, hex_to_rgba  # noqa: E402
+from brand import AMBER, disc_icon  # noqa: E402
 
 SIZE = 1024
 
-# Colour and eye shape both come from brand.py, so the app icon, tray icon
-# and in-panel button are guaranteed to be the same mark in the same amber.
-AMBER_RGBA = hex_to_rgba(AMBER)
-WHITE = (255, 255, 255, 255)
-
 
 def build_icon() -> Image.Image:
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    """The bundle icon — Finder, the Dock, the installer.
 
-    margin = SIZE * 0.06
-    draw.ellipse((margin, margin, SIZE - margin, SIZE - margin), fill=AMBER_RGBA)
-
-    # The almond eye — same mask the in-panel button glyph is built from,
-    # standing in for the app's focus on eye comfort/ease.
-    cx, cy = SIZE * 0.5, SIZE * 0.5
-    lens = eye_lens_mask(SIZE)
-
-    img.paste(Image.new("RGBA", (SIZE, SIZE), WHITE), (0, 0), lens)
-
-    iris_r = SIZE * 0.11
-    draw.ellipse(
-        (cx - iris_r, cy - iris_r, cx + iris_r, cy + iris_r), fill=AMBER_RGBA
-    )
-    pupil_r = SIZE * 0.05
-    draw.ellipse(
-        (cx - pupil_r, cy - pupil_r, cx + pupil_r, cy + pupil_r), fill=WHITE
-    )
-
-    return img
+    Always amber, unlike the menu-bar icon, which switches to blue while the
+    app is off. This one is the app's identity rather than its state: it is
+    mostly seen when the app isn't running at all, so there'd be no state for
+    it to report even if it wanted to.
+    """
+    return disc_icon(SIZE, AMBER)
 
 
 def save_png(img: Image.Image):

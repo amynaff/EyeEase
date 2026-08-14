@@ -26,6 +26,11 @@ reason 2700K reads as candlelight instead of red. kelvin_to_rgb() computes
 it.
 
 brightness: 0.15 -> 1.0 (scales all three channels together, a software dim)
+
+zero_blue is the one mode that leaves the blackbody curve behind: it pins
+the temperature to the warmest end AND writes the blue ramp as literal
+zeros, so no rounding can leave a stray count of blue in the output. See
+build_ramp() for what that does and does not remove.
 """
 
 import sys
@@ -96,13 +101,17 @@ def kelvin_to_rgb(kelvin: float):
     return (r / nr, g / ng, b / nb)
 
 
-def kelvin_to_hex(kelvin: float, brightness: float = 1.0) -> str:
+def kelvin_to_hex(kelvin: float, brightness: float = 1.0, zero_blue: bool = False) -> str:
     """The tint as a '#rrggbb' string, for showing a preview swatch in the UI.
 
     This is the colour a white pixel ends up as, so the swatch shows the
     user what their screen is actually about to do.
     """
+    if zero_blue:
+        kelvin = KELVIN_MIN
     r, g, b = kelvin_to_rgb(kelvin)
+    if zero_blue:
+        b = 0.0
     scale = max(0.15, min(1.0, brightness))
     return "#{:02x}{:02x}{:02x}".format(
         int(round(r * scale * 255)),
@@ -111,12 +120,36 @@ def kelvin_to_hex(kelvin: float, brightness: float = 1.0) -> str:
     )
 
 
-def build_ramp(kelvin: float, brightness: float):
-    """Returns three lists of 256 ints (0-65535) for R, G, B."""
+def build_ramp(kelvin: float, brightness: float, zero_blue: bool = False):
+    """Returns three lists of 256 ints (0-65535) for R, G, B.
+
+    zero_blue drops the blue ramp to flat zero and pins the temperature to
+    KELVIN_MIN. Two things are worth being precise about:
+
+    * The blackbody curve already returns blue = 0 at or below 1900K, so
+      the warmest slider positions were arguably "zero blue" too. Arguably
+      isn't good enough for a switch that promises it, hence the explicit
+      zeros: nothing here depends on where a curve happens to land, and no
+      later rounding can put a count of blue back.
+    * Zeroing blue at 6500K would leave a sickly green-white, because green
+      is still near full there. Pinning to KELVIN_MIN brings green down the
+      blackbody curve with it, which is what makes the result read as
+      candle-amber rather than as a broken monitor.
+
+    What this cannot do: an LCD backlight is a blue LED behind a phosphor,
+    and a little of that blue leaks through the red and green subpixel
+    filters no matter what the GPU sends. Zero blue here means zero blue
+    *output from the ramp*, which is the whole of what any software on any
+    OS can control. Removing the rest is a job for the panel.
+    """
+    if zero_blue:
+        kelvin = KELVIN_MIN
     kelvin = max(KELVIN_MIN, min(KELVIN_MAX, kelvin))
     brightness = max(0.15, min(1.0, brightness))
 
     kr, kg, kb = kelvin_to_rgb(kelvin)
+    if zero_blue:
+        kb = 0.0
 
     red, green, blue = [], [], []
     for i in range(RAMP_SIZE):
@@ -143,7 +176,7 @@ class GammaController:
         self.system = platform.system()  # 'Darwin', 'Windows', 'Linux'
         self._saved_hw_brightness = None  # set while PWM-safe mode is active
 
-    def apply(self, kelvin: float, brightness: float) -> bool:
+    def apply(self, kelvin: float, brightness: float, zero_blue: bool = False) -> bool:
         """Push a ramp to the display. Returns False if the OS refused it.
 
         Both platforms report failure through a return value rather than an
@@ -151,7 +184,7 @@ class GammaController:
         was indistinguishable from a successful one, and the screen just
         never changed.
         """
-        red, green, blue = build_ramp(kelvin, brightness)
+        red, green, blue = build_ramp(kelvin, brightness, zero_blue)
         if self.system == "Darwin":
             return self._apply_macos(red, green, blue)
         if self.system == "Windows":
@@ -322,19 +355,73 @@ class GammaController:
         )
         return cg.CGMainDisplayID()
 
+    # DisplayServices is tried before CoreDisplay because CoreDisplay has
+    # stopped working on current macOS: measured on a MacBook Air (M4,
+    # macOS 26.5.2), CoreDisplay_Display_SetUserBrightness returns without
+    # error and moves nothing, and GetUserBrightness reports a flat 1.0
+    # while the panel is plainly sitting at 45%. Both symbols still resolve,
+    # so nothing raises and nothing works — which is exactly the failure the
+    # probe in _backlight_is_writable() catches, and why no-flicker dimming
+    # never offered itself on that machine. DisplayServices drives the same
+    # panel correctly. CoreDisplay is kept underneath for the older Macs
+    # where the reverse is true.
+    def _display_services(self):
+        for path in (
+            "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices",
+            "/System/Library/Frameworks/DisplayServices.framework/DisplayServices",
+        ):
+            try:
+                return ctypes.CDLL(path)
+            except OSError:
+                continue
+        raise OSError("DisplayServices framework not found")
+
     def _get_hw_brightness_macos(self):
-        core_display = self._core_display()
         display_id = self._main_display_id()
+
+        try:
+            display_services = self._display_services()
+            display_services.DisplayServicesGetBrightness.argtypes = [
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_float),
+            ]
+            value = ctypes.c_float()
+            # Returns 0 on success, like most of CoreFoundation's C API.
+            if display_services.DisplayServicesGetBrightness(
+                display_id, ctypes.byref(value)
+            ) == 0:
+                return float(value.value)
+        except OSError:
+            pass
+
+        core_display = self._core_display()
         core_display.CoreDisplay_Display_GetUserBrightness.restype = ctypes.c_double
         value = core_display.CoreDisplay_Display_GetUserBrightness(display_id)
         return float(value)
 
     def _set_hw_brightness_macos(self, level: float) -> bool:
-        core_display = self._core_display()
         display_id = self._main_display_id()
+
+        try:
+            display_services = self._display_services()
+            display_services.DisplayServicesSetBrightness.argtypes = [
+                ctypes.c_uint32,
+                ctypes.c_float,
+            ]
+            if display_services.DisplayServicesSetBrightness(
+                display_id, ctypes.c_float(level)
+            ) == 0:
+                return True
+        except OSError:
+            pass
+
+        core_display = self._core_display()
         core_display.CoreDisplay_Display_SetUserBrightness(
             display_id, ctypes.c_double(level)
         )
+        # No honest success to report here: this call returns void and lies
+        # by omission on current macOS. The caller re-reads the brightness
+        # to find out what really happened.
         return True
 
     # Windows exposes the internal laptop panel's brightness through WMI

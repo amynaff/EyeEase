@@ -29,6 +29,23 @@ AMBER_BRIGHT = "#fec28c"  # hover / lifted state
 AMBER_DIM = "#a04b00"     # active-but-quiet: preset chips, dimmed status dot
 INK = "#3f1d00"           # text and marks sitting on top of amber (7.9:1)
 
+# -- the off state ------------------------------------------------------
+# BLUE is derived the same way AMBER is, from the same two temperatures.
+# AMBER is the light the Evening preset lets *through* (kelvin_to_hex(2700));
+# BLUE is the light it takes *away* — (1,1,1) minus the 2700K multipliers,
+# which lands on hue 208 degrees, and is the literal answer to "what is this
+# app removing". Its lightness is then tuned until its luminance matches
+# AMBER's, so the two states weigh the same in a menu bar: white-on-colour
+# 1.93 vs 1.92, and against a dark menu bar 8.83 vs 8.85.
+#
+# The warning at the top of this file — that a blue accent dies once the
+# gamma ramp takes blue to zero — doesn't apply here, and that's the whole
+# reason this colour can exist. Blue is the *off* state, and off means the
+# ramp has been reset. This colour is only ever drawn on an untouched screen.
+BLUE = "#7ac1ff"          # off / unfiltered — the light being let through
+BLUE_BRIGHT = "#a9d6ff"   # hover / lifted state
+BLUE_INK = "#0a2942"      # text and marks sitting on top of blue (7.7:1)
+
 BG = "#0d0d0f"
 SURFACE = "#17171b"
 SURFACE_HI = "#232329"
@@ -107,3 +124,36 @@ def eye_image(size: int, eye_color: str, iris_color: str):
     )
 
     return img.resize((size, size), Image.LANCZOS)
+
+
+def disc_icon(size: int, disc_color: str):
+    """The round app/tray icon: a filled disc with the eye punched into it.
+
+    Lives here rather than in the icon generator because the tray icon now
+    draws it live in two colours — amber while the app is easing the screen,
+    blue while it isn't — and a mark that's generated in one file and drawn
+    in another is a mark that drifts.
+    """
+    disc = hex_to_rgba(disc_color)
+    white = (255, 255, 255, 255)
+
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    margin = size * 0.06
+    draw.ellipse((margin, margin, size - margin, size - margin), fill=disc)
+
+    img.paste(Image.new("RGBA", (size, size), white), (0, 0), eye_lens_mask(size))
+
+    centre = size / 2
+    iris_r = size * 0.11
+    draw.ellipse(
+        (centre - iris_r, centre - iris_r, centre + iris_r, centre + iris_r),
+        fill=disc,
+    )
+    pupil_r = size * 0.05
+    draw.ellipse(
+        (centre - pupil_r, centre - pupil_r, centre + pupil_r, centre + pupil_r),
+        fill=white,
+    )
+    return img
