@@ -63,6 +63,26 @@ def run_tray(app):
     return icon
 
 
+def force_redraw(icon):
+    """Ask the status item to repaint after its image has been swapped.
+
+    pystray sets the new NSImage on the button and stops, which is enough
+    when AppKit is running its own event loop. Here it isn't: run_detached()
+    hands the loop to tkinter's mainloop, so a button whose image changed
+    outside AppKit's own drawing cycle can sit there showing the old one —
+    which is what "the icon is still amber when it's off" looks like.
+
+    Reaches into pystray's internals, so it fails quietly: a status item
+    that repaints a moment late is worth far less than a crash.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        icon._status_item.button().setNeedsDisplay_(True)
+    except (AttributeError, TypeError):
+        pass
+
+
 def _restore_display_on_terminate(app):
     """Catch the one way of quitting that skips every Python exit path.
 

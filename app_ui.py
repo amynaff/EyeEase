@@ -1188,6 +1188,7 @@ class EyeEaseApp(ctk.CTk):
             return
         try:
             self._tray_icon.icon = tray.make_icon_image(self.settings["is_on"])
+            tray.force_redraw(self._tray_icon)
         except Exception:
             # A menu-bar icon that won't re-draw is not a reason to take the
             # app down with it — the panel is still the real control.
