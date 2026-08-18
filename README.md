@@ -422,3 +422,9 @@ be broken:
    that's the place to look.
 5. **Desktop/external monitors** — `WmiMonitorBrightness` generally doesn't
    exist for them, so PWM-safe should decline rather than error.
+
+## License
+MIT — see [LICENSE](LICENSE). Use it, change it, ship it, sell it; just keep
+the copyright notice. The README and the site both called this open source
+long before there was a licence file saying so, which legally meant the
+opposite: no licence is all rights reserved by default.
