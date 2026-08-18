@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EyeEase — a kinder screen for your Mac</title>
+<meta name="description" content="Free, open-source blue-light and flicker filter for macOS. Follows the sun where you live, holds the backlight steady, and never touches the network.">
+
+<meta property="og:title" content="EyeEase — a kinder screen for your Mac">
+<meta property="og:description" content="Warms your screen as the light actually goes, wherever you live. Free, open source, and it never touches the network.">
+<meta property="og:type" content="website">
+
+<style>
+/* Palette is lifted straight from the app's brand.py, so the site and the
+   product can't drift apart. The accent is the red-orange of blue-blocker
+   lenses, which is also exactly what EyeEase makes at 1200K — its zero-blue
+   end. Blue is the light it takes away there. */
+:root {
+  --bg: #0b0b0d;
+  --surface: #17171b;
+  --surface-hi: #232329;
+  --text: #f2f2f4;
+  --muted: #8a8a94;
+  --lens: #ff5600;
+  --lens-bright: #ff8c52;
+  --blue: #0098e6;
+  --ink: #170700;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- hero ---------- */
+.hero { padding: clamp(72px, 14vh, 140px) 0 clamp(48px, 8vh, 88px); text-align: center; }
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 28px;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 8.5vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  margin: 0 0 28px;
+}
+
+/* The two halves of the promise, each in the colour it refers to. */
+h1 .lens { color: var(--lens); }
+h1 .blue  { color: var(--blue); }
+
+.lede {
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  color: #c9c9d1;
+  max-width: 46ch;
+  margin: 0 auto 38px;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 30px;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.btn-primary { background: var(--lens); color: var(--ink); }
+.btn-primary:hover { background: var(--lens-bright); }
+.btn-ghost { border-color: #34343c; color: var(--text); }
+.btn-ghost:hover { border-color: var(--muted); background: var(--surface); }
+
+.btn:focus-visible,
+.slider:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 30px 0 0;
+}
+.meta a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.meta a:hover { color: var(--text); }
+
+/* ---------- demo ---------- */
+.demo { padding-block: clamp(40px, 7vh, 72px); }
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 40px);
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .split { grid-template-columns: 1fr; }
+}
+
+.ringwrap {
+  position: relative;
+  margin: 0 auto;
+  /* Capped, not just column-width: when the grid collapses on a phone the
+     ring would otherwise take the full width and swallow the page. */
+  max-width: 240px;
+  width: 100%;
+}
+
+/* A conic-gradient rather than an SVG or a canvas: the ring is 24 hours of
+   colour sliding into colour, which is precisely what a conic gradient is
+   for, and the browser interpolates the wedges for free. */
+.ring {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface-hi);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 58.5%);
+  mask: radial-gradient(circle, transparent 58%, #000 58.5%);
+}
+
+.ringface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.ringk { font-size: clamp(1.3rem, 4vw, 1.7rem); font-weight: 700; letter-spacing: -0.02em; }
+.ringsub { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.caption.sub { opacity: .75; }
+
+.places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 18px 0 0;
+}
+.place {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid #2a2a32;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+.place:hover { color: var(--text); border-color: var(--muted); }
+.place.is-on { background: #8a2e00; border-color: #8a2e00; color: var(--text); }
+.place:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+.screen {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2a2a32;
+  /* A light surface, because that's where a warm tint is actually visible.
+     Multiplying the lens colour over a near-black page would show almost
+     nothing. */
+  background: #f4f1ec;
+  aspect-ratio: 16 / 10;
+}
+
+/* The tint sits on top and multiplies, which is what a gamma ramp does to
+   every pixel on the way out. Same idea, same maths — see setTint(). */
+.tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  background: #fff;
+  pointer-events: none;
+}
+
+/* A neutral mock of "some window on a screen" — no real app imitated. */
+.mock { padding: 7% 7% 0; height: 100%; }
+.bar { display: flex; gap: 7px; margin-bottom: 7%; }
+.dot { width: 11px; height: 11px; border-radius: 50%; background: #d3cec6; }
+.line { height: 11px; border-radius: 6px; background: #d9d4cc; margin-bottom: 3.4%; }
+.line.head { height: 19px; width: 52%; background: #b8b2a8; margin-bottom: 6%; }
+.line.w90 { width: 90%; } .line.w75 { width: 75%; } .line.w82 { width: 82%; }
+.line.w60 { width: 60%; } .line.w40 { width: 40%; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.controls label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.slider {
+  flex: 1 1 220px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #6f6f7a, var(--lens));
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  border: none;
+  cursor: pointer;
+}
+
+.readout {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 8ch;
+  text-align: right;
+  color: var(--lens);
+}
+
+.firstrun {
+  max-width: 52ch;
+  margin: 26px auto 0;
+  padding: 16px 20px;
+  border: 1px solid #2a2a32;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  text-align: left;
+}
+.firstrun strong { color: var(--text); }
+.firstrun em { color: var(--text); font-style: normal; font-family: var(--mono); font-size: 0.86rem; }
+
+.caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin: 14px 0 0;
+  text-align: center;
+}
+
+/* ---------- features ---------- */
+.features { padding: clamp(40px, 7vh, 80px) 0 clamp(64px, 10vh, 110px); }
+.rule { border: 0; border-top: 1px solid #24242b; margin: 0 0 8px; }
+
+.feature {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 8px 18px;
+  align-items: baseline;
+  padding: 26px 0;
+  border-bottom: 1px solid #1c1c22;
+}
+.feature .num { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.feature h3 { margin: 0; font-size: 1.12rem; font-weight: 650; letter-spacing: -0.01em; }
+.feature p { margin: 8px 0 0; color: var(--muted); grid-column: 2; font-size: 0.97rem; }
+
+/* ---------- footer ---------- */
+footer {
+  padding: 40px 0 64px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+footer a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+footer a:hover { color: var(--text); }
+
+/* An app for eye comfort has no business animating aggressively, and no
+   business ignoring this. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<main>
+  <section class="hero wrap">
+    <p class="kicker">Blue-light &amp; flicker filter for macOS</p>
+    <h1>It knows when<br>your <span class="lens">evening</span> is.</h1>
+    <p class="lede">
+      EyeEase warms your screen past where Night Shift stops — following the sun
+      where you actually live, not a countdown started at sunset. Twilight takes
+      an hour in Quito and two in Reykjavík. So does the fade.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn-primary"
+         href="https://github.com/amynaff/EyeEase/releases/latest/download/EyeEase-macOS.zip">
+        Download for macOS
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/amynaff/EyeEase">
+        View on GitHub ↗
+      </a>
+    </div>
+
+    <p class="meta">
+      macOS 11+ &middot; Apple silicon &middot; Free &amp; open source &middot; v0.1.0 &middot;
+      <a href="#see">see it in action</a>
+    </p>
+
+    <!-- Sits under the button rather than in a FAQ nobody scrolls to. The
+         warning is alarming, it says the word malware, and someone meeting
+         it cold will assume the app is unsafe and delete it. -->
+    <p class="firstrun">
+      <strong>Opening it the first time:</strong> macOS will say it can't
+      check the app for malware. That's because it isn't signed with an Apple
+      certificate yet, not because anything is wrong with it — the source is
+      right there to read. Open <em>System&nbsp;Settings → Privacy&nbsp;&amp;
+      Security</em>, scroll down, and click <em>Open&nbsp;Anyway</em>. Once
+      only.
+    </p>
+  </section>
+
+  <section class="demo wrap" id="see">
+    <div class="split">
+      <!-- The ring is the app's own day readout, running the same sunrise
+           equation and the same blackbody curve. Switching city is the whole
+           argument in one control: the ring visibly changes shape, because
+           the sky does. -->
+      <figure class="ringwrap">
+        <div class="ring" id="ring" role="img"
+             aria-label="Twenty-four hours of screen warmth, warm through the night and neutral by day"></div>
+        <div class="ringface">
+          <output class="ringk" id="readout">4000K</output>
+          <span class="ringsub" id="ringsub">73 min fade</span>
+        </div>
+      </figure>
+
+      <div class="screen">
+        <div class="mock">
+          <div class="bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="line head"></div>
+          <div class="line w90"></div>
+          <div class="line w75"></div>
+          <div class="line w82"></div>
+          <div class="line w60"></div>
+          <div class="line w90"></div>
+          <div class="line w40"></div>
+        </div>
+        <div class="tint" id="tint"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label for="warmth">How warm it gets</label>
+      <input class="slider" type="range" id="warmth" min="0" max="100" value="45"
+             aria-describedby="readout">
+    </div>
+
+    <div class="places" role="group" aria-label="Example locations">
+      <button class="place" data-lat="-0.18" data-name="Quito">Quito</button>
+      <button class="place is-on" data-lat="40.71" data-name="New York">New York</button>
+      <button class="place" data-lat="51.51" data-name="London">London</button>
+      <button class="place" data-lat="64.15" data-name="Reykjavík">Reykjavík</button>
+    </div>
+    <p class="caption" id="ringcap">
+      New York, in August: the evening fade takes 73 minutes. Midnight at the top.
+    </p>
+    <p class="caption sub">
+      Drag the slider, then change city. Same code, same thresholds — the fade
+      gets longer as you go north because twilight does.
+    </p>
+  </section>
+
+  <section class="features wrap">
+    <hr class="rule">
+
+    <div class="feature">
+      <span class="num">01</span>
+      <h3>Zero blue, zero flicker</h3>
+      <p>
+        One switch. The blue channel is written as literal zeros, not merely
+        turned down, and the backlight is pinned so nothing strobes while the
+        dimming happens in software.
+      </p>
+    </div>
+
+    <div class="feature">
+      <span class="num">02</span>
+      <h3>Follows your sky, not a timer</h3>
+      <p>
+        Type your city. It works out the sun's height through the day and warms
+        as the light actually goes — 58 minutes at the equator, over two hours
+        in Iceland. Fixed hours instead, if you'd rather.
+      </p>
+    </div>
+
+    <div class="feature">
+      <span class="num">03</span>
+      <h3>Never touches the network</h3>
+      <p>
+        No accounts, no analytics, no update pings — not a single network call
+        in the source, which you're welcome to go and check. Even the city list
+        is carried inside the app, so knowing where the sun is never means
+        telling anyone where you are.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  Made by <a href="https://github.com/amynaff">amynaff</a> &middot;
+  <a href="https://github.com/amynaff/EyeEase">source on GitHub</a>
+</footer>
+
+<script>
+// Tanner Helland's Planckian approximation — the same one gamma.py uses, so
+// the demo warms exactly the way the app does rather than approximately.
+function planckian(kelvin) {
+  const t = Math.max(1000, Math.min(40000, kelvin)) / 100;
+  let r, g, b;
+
+  if (t <= 66) {
+    r = 255;
+    g = 99.4708025861 * Math.log(t) - 161.1195681661;
+  } else {
+    r = 329.698727446 * Math.pow(t - 60, -0.1332047592);
+    g = 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+  }
+
+  if (t >= 66) b = 255;
+  else if (t <= 19) b = 0;   // below ~1900K a blackbody emits no blue at all
+  else b = 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+
+  const clamp = v => Math.max(0, Math.min(255, v));
+  return [clamp(r), clamp(g), clamp(b)];
+}
+
+// Normalised against 6500K so the neutral end is a screen we haven't touched.
+function kelvinToRGB(kelvin) {
+  const [r, g, b] = planckian(kelvin);
+  const [nr, ng, nb] = planckian(6500);
+  return [r / nr, g / ng, b / nb];
+}
+
+const KELVIN_MAX = 6500, KELVIN_MIN = 1200;
+
+// --- the same astronomy auto_schedule.py runs -------------------------
+// Elevation, not a timer. Sunset is an instant; how long the light takes to
+// go depends on how steeply the sun descends, which depends on latitude —
+// which is the entire reason this demo has a city switcher.
+const ELEVATION_DAY = 10, ELEVATION_NIGHT = -6;
+const DAY_OF_YEAR = 228;   // an August day, so the ring shows a real date
+
+function declination(dayOfYear) {
+  // Standard approximation of the sun's tilt across the year.
+  return -23.44 * Math.PI / 180 *
+    Math.cos((2 * Math.PI / 365) * (dayOfYear + 10));
+}
+
+function elevationAt(latDeg, hours) {
+  const lat = latDeg * Math.PI / 180;
+  const dec = declination(DAY_OF_YEAR);
+  const hourAngle = (hours - 12) * 15 * Math.PI / 180;
+  const sinEl = Math.sin(lat) * Math.sin(dec) +
+                Math.cos(lat) * Math.cos(dec) * Math.cos(hourAngle);
+  return Math.asin(Math.max(-1, Math.min(1, sinEl))) * 180 / Math.PI;
+}
+
+function smoothstep(t) {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * (3 - 2 * t);
+}
+
+function nightFraction(latDeg, hours) {
+  const el = elevationAt(latDeg, hours);
+  return smoothstep((ELEVATION_DAY - el) / (ELEVATION_DAY - ELEVATION_NIGHT));
+}
+
+const slider  = document.getElementById('warmth');
+const tint    = document.getElementById('tint');
+const readout = document.getElementById('readout');
+const ring    = document.getElementById('ring');
+const ringsub = document.getElementById('ringsub');
+const ringcap = document.getElementById('ringcap');
+const places  = [...document.querySelectorAll('.place')];
+
+let latitude = 40.71, placeName = 'New York';
+
+function css(kelvin) {
+  const [r, g, b] = kelvinToRGB(kelvin);
+  return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+}
+
+function draw() {
+  const depth = slider.value / 100;
+  const kelvin = KELVIN_MAX - depth * (KELVIN_MAX - KELVIN_MIN);
+  const [, , blue] = kelvinToRGB(kelvin);
+
+  // The mock page shows the deepest the screen will get; the ring shows how
+  // the day arrives at it.
+  tint.style.background = css(kelvin);
+  readout.textContent = blue === 0 ? 'NO BLUE' : `${Math.round(kelvin / 50) * 50}K`;
+  readout.style.color = css(kelvin);
+
+  const stops = [];
+  const STEPS = 96;                       // 15-minute resolution
+  for (let i = 0; i <= STEPS; i++) {
+    const hours = (i / STEPS) * 24;
+    const f = nightFraction(latitude, hours) * depth;
+    const colour = f <= 0.004
+      ? 'var(--surface-hi)'
+      : css(KELVIN_MAX - f * (KELVIN_MAX - KELVIN_MIN));
+    stops.push(`${colour} ${(i / STEPS * 360).toFixed(1)}deg`);
+  }
+  // from 0deg puts midnight at the top, matching the app.
+  ring.style.background = `conic-gradient(from 0deg, ${stops.join(', ')})`;
+
+  // Report the transition rather than just sunset: the length of it is the
+  // thing that differs between these cities.
+  let warmStart = null, fullWarm = null, prev = null;
+  for (let i = 0; i <= 1440; i++) {
+    const hours = i / 60;
+    const f = nightFraction(latitude, hours);
+    if (prev !== null && hours > 12) {
+      if (prev < 0.02 && f >= 0.02) warmStart = hours;
+      if (prev < 0.98 && f >= 0.98) fullWarm = hours;
+    }
+    prev = f;
+  }
+  // Duration, not clock times. This demo works in solar time — it skips the
+  // longitude and equation-of-time corrections the app makes — so the hour
+  // it names would be off by up to a quarter hour. How *long* the fade takes
+  // is the part this model gets right, to within a minute of the app, and
+  // it's also the part that differs between these cities.
+  if (warmStart !== null && fullWarm !== null) {
+    const mins = Math.round((fullWarm - warmStart) * 60);
+    ringsub.textContent = `${mins} min fade`;
+    ringcap.textContent =
+      `${placeName}, in August: the evening fade takes ${mins} minutes. Midnight at the top.`;
+  } else {
+    ringsub.textContent = 'no sunset';
+    ringcap.textContent = `${placeName}, in August: the sun never gets low enough to trigger it.`;
+  }
+}
+
+places.forEach(button => {
+  button.addEventListener('click', () => {
+    places.forEach(b => b.classList.toggle('is-on', b === button));
+    latitude = parseFloat(button.dataset.lat);
+    placeName = button.dataset.name;
+    draw();
+  });
+});
+
+slider.addEventListener('input', draw);
+draw();
+</script>
+
+</body>
+</html>
