@@ -329,6 +329,38 @@ shows up as the tray icon, matching how it behaves when run from source.
 `build/` and `dist/` are gitignored; rerun the command above to rebuild
 after code changes.
 
+### Releasing a signed build
+That build is ad-hoc signed, which is fine on your own machine and tells
+everybody else that macOS "could not verify this app is free of malware".
+`./release.sh` produces one that doesn't: it builds, signs, notarises with
+Apple, staples the ticket, and then checks what Gatekeeper will actually say
+before you upload anything.
+
+It needs two things that deliberately aren't in this repo:
+
+- A **Developer ID Application** certificate in your keychain. The type
+  matters. An *Apple Development* certificate signs apps for your own
+  devices and Apple refuses to notarise anything signed with it — the script
+  checks for this and says so rather than failing later inside Apple's
+  pipeline. Create one at developer.apple.com → Certificates → Developer ID
+  Application.
+- A notarytool credential profile, which you store yourself:
+
+  ```
+  xcrun notarytool store-credentials "eyeease" \
+    --apple-id "you@example.com" --team-id "YOURTEAMID" \
+    --password "app-specific-password"
+  ```
+
+  The app-specific password comes from appleid.apple.com. It lives in your
+  keychain and nowhere else; nothing in this repository should ever contain
+  it.
+
+The stapling step is why the app opens on a machine with no internet:
+without a stapled ticket Gatekeeper has to ask Apple, and refuses when it
+can't. The script re-zips afterwards, because stapling changes the bundle
+and the archive made before it is already out of date.
+
 ## Packaging into a real .exe (Windows)
 ```
 pip install -r requirements.txt pyinstaller
