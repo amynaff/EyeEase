@@ -154,34 +154,63 @@ is one write rather than dozens) and restored next launch. Settings files
 written before the Kelvin rewrite stored a 0.0-1.0 `warmth` value; it carries
 over automatically as the equivalent slider position.
 
-## Sunset/sunrise mode, and why it asks for coordinates
+## Sunset/sunrise mode, and how it learns where you are
 `auto_schedule.py` implements the standard sunrise equation, so the schedule
-can run on real sunset and sunrise times instead of fixed clock times. Switch
-the schedule card to **Sunset/sunrise** and type a latitude and longitude.
+can run on the real sun instead of fixed clock times. Switch the schedule
+card to **Sunset/sunrise** and type your city.
 
-The fields accept plain signed decimals (`40.7128`, `-74.006`) or a trailing
-hemisphere letter (`40.7 N`, `74.0 W`), since that's how coordinates are
-usually written down. Anything out of range or unparseable reverts to the
-last good value rather than sitting there looking accepted; clearing a field
-unsets it, and the schedule then reports itself unusable instead of guessing
-a location. Both modes keep their own settings, so switching back and forth
-doesn't lose your times or your coordinates.
+One field takes either. A city name resolves against `cities.py`, a bundled
+list of about 225 large cities and capitals; matches appear as you type and
+ignore accents, so `sao paulo` finds São Paulo. Raw `lat, lon` works in the
+same field, with or without hemisphere letters (`40.7 N, 74.0 W`), for anyone
+who knows exactly where they are or lives somewhere the list doesn't cover.
+Unrecognised text restores the previous location rather than sitting there
+looking accepted, and clearing the field unsets it — the schedule then
+reports itself unusable instead of guessing.
+
+It used to ask for a latitude and a longitude in two labelled boxes. That
+assumed the user knew their own latitude, which almost nobody does, and it
+quietly made this whole mode unreachable for anyone not willing to go and
+look it up.
+
+A saved location is shown back as the nearest known city with the exact
+coordinates underneath, but only if a city is within 120km — a hand-typed
+position out in the country stays as numbers rather than being relabelled as
+a city the user never chose.
+
+Both modes keep their own settings, so switching back and forth doesn't lose
+your times or your location.
 
 Sun times are shown in *your computer's* local time. Setting coordinates for
 somewhere in another time zone is therefore legitimate but odd-looking — you
 get that place's sunset expressed in your clock. Use where you actually are.
 
-There is deliberately no automatic location lookup. Deriving latitude from
-the time zone would be wrong by hundreds of miles — a zone is a band of
-longitude, not a point — and an IP geolocation call would mean this app
-talks to the network and learns where you are. Neither is a reasonable trade
-for a utility that dims a screen, so solar mode is opt-in and entirely
-offline. Fixed times remain the default and need nothing but a clock.
+There is still no automatic location lookup, and the city list is the reason
+one isn't needed. Asking macOS for your position means a permission prompt
+and an app that knows where you live; an IP geolocation call means this thing
+talks to the network. Deriving latitude from the time zone is worse than
+either — a zone is a band of longitude, not a point, and the machine this was
+built on reports UTC−3 while sitting in California. Typing a city name costs
+a few keystrokes and none of that. Fixed times remain the default and need
+nothing but a clock.
 
 Accuracy is within about a minute at ordinary latitudes (checked against
 published times for New York and Reykjavík). Polar day and polar night are
 handled: when the sun never crosses the horizon there are no events, and the
 panel says so rather than inventing a sunset.
+
+### The curve follows the sun, not a stopwatch
+Warmth tracks the sun's **elevation**, not a countdown from sunset. Sunset is
+an instant; how long the light takes to go is a function of latitude and
+date, because the sun descends steeply near the equator and shallowly near
+the poles. Measured evening transitions, first warming to fully warm: Quito
+58 minutes, New York 82, London 108, Reykjavík 124. Same code and thresholds
+throughout — the difference is the sky.
+
+Warming begins at 10° above the horizon and completes at 6° below it (civil
+twilight). The upper threshold is deliberately well above the horizon,
+because the light is already reddening long before the sun touches it;
+waiting for sunset itself made the change arrive late and then hurry.
 
 ## Launch at login — one caveat
 The login item records whatever is running when you switch it on. Packaged as

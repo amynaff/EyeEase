@@ -22,13 +22,9 @@ from gamma import (
     KELVIN_MIN,
     kelvin_to_hex,
 )
-from auto_schedule import (
-    Schedule,
-    parse_hhmm,
-    parse_latitude,
-    parse_longitude,
-)
+from auto_schedule import Schedule, parse_hhmm
 import brand
+import cities
 import startup
 import tray
 
@@ -496,22 +492,45 @@ class EyeEaseApp(ctk.CTk):
         ).pack(side="left", padx=(8, 0))
         self.end_entry = self._add_time_entry(self.times_row, self.schedule.end)
 
+        # One field taking a city name or a raw "lat, lon" pair. Two labelled
+        # coordinate boxes assumed the user knows their own latitude, which
+        # almost nobody does — it quietly made sunset mode unreachable for
+        # anyone who wasn't going to go and look it up.
         self.coords_row = ctk.CTkFrame(box, fg_color="transparent")
-        ctk.CTkLabel(
-            self.coords_row, text="Lat", font=ctk.CTkFont(size=11),
-            text_color=TEXT_MUTED,
-        ).pack(side="left")
-        self.lat_entry = self._add_coord_entry(
-            self.coords_row, self.schedule.latitude
-        )
-        ctk.CTkLabel(
-            self.coords_row, text="Lon", font=ctk.CTkFont(size=11),
-            text_color=TEXT_MUTED,
-        ).pack(side="left", padx=(10, 0))
-        self.lon_entry = self._add_coord_entry(
-            self.coords_row, self.schedule.longitude
-        )
 
+        top = ctk.CTkFrame(self.coords_row, fg_color="transparent")
+        top.pack(fill="x")
+        ctk.CTkLabel(
+            top, text="Where", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+        ).pack(side="left")
+
+        self.place_entry = ctk.CTkEntry(
+            top,
+            height=28,
+            corner_radius=8,
+            font=ctk.CTkFont(size=12),
+            fg_color=SURFACE_HI,
+            border_width=0,
+            text_color=TEXT,
+            placeholder_text="your city",
+        )
+        self.place_entry.bind("<Return>", lambda _e: self._commit_place())
+        self.place_entry.bind("<FocusOut>", lambda _e: self._commit_place())
+        self.place_entry.bind("<KeyRelease>", lambda _e: self._suggest_places())
+        self.place_entry.pack(side="left", fill="x", expand=True, padx=(8, 0))
+
+        # Doubles as the suggestion line while typing and the confirmation
+        # line once something is set, so the row never grows or jumps.
+        self.place_note = ctk.CTkLabel(
+            self.coords_row,
+            text="",
+            font=ctk.CTkFont(size=10),
+            text_color=TEXT_MUTED,
+            anchor="w",
+        )
+        self.place_note.pack(fill="x", pady=(4, 0))
+
+        self._restore_place_field()
         self._show_schedule_inputs()
 
     def _show_schedule_inputs(self):
@@ -540,55 +559,58 @@ class EyeEaseApp(ctk.CTk):
         self._apply_current()
         self._queue_save()
 
-    def _add_coord_entry(self, parent, value):
-        entry = ctk.CTkEntry(
-            parent,
-            width=78,
-            height=28,
-            corner_radius=8,
-            justify="center",
-            font=ctk.CTkFont(size=12),
-            fg_color=SURFACE_HI,
-            border_width=0,
-            text_color=TEXT,
-            placeholder_text="—",
-        )
-        if value is not None:
-            entry.insert(0, f"{value:g}")
-        entry.bind("<Return>", lambda _e: self._commit_coords())
-        entry.bind("<FocusOut>", lambda _e: self._commit_coords())
-        entry.pack(side="left", padx=(8, 0))
-        return entry
+    def _restore_place_field(self):
+        """Show whatever location is already saved, as a place not a number."""
+        lat, lon = self.schedule.latitude, self.schedule.longitude
+        self.place_entry.delete(0, "end")
+        if lat is None or lon is None:
+            self.place_note.configure(text="a city name, or \u201clat, lon\u201d")
+            return
+        label = cities.nearest_label(lat, lon)
+        self.place_entry.insert(0, label)
+        self.place_note.configure(text=f"{lat:.4f}, {lon:.4f}")
 
-    def _commit_coords(self):
-        """Validate both coordinates, keeping each only if it parses.
+    def _suggest_places(self):
+        """Offer matches as the user types, without committing anything."""
+        typed = self.place_entry.get().strip()
+        if not typed:
+            self.place_note.configure(text="a city name, or \u201clat, lon\u201d")
+            return
+        matches = cities.search(typed, limit=3)
+        if matches:
+            self.place_note.configure(
+                text="  \u00b7  ".join(f"{n}, {r}" for n, r, _, _ in matches)
+            )
+        elif "," in typed:
+            self.place_note.configure(text="press return to use these coordinates")
+        else:
+            self.place_note.configure(text="no match \u2014 try a nearby larger city")
 
-        Empty is allowed and means "not set" — that's how you clear a
-        coordinate, and the schedule reports itself unusable rather than
-        guessing a location.
+    def _commit_place(self):
+        """Resolve the field to coordinates, or put back what was there.
+
+        Empty means "not set": the schedule then reports itself unusable
+        rather than guessing where anyone is.
         """
-        for entry, parser, attribute in (
-            (self.lat_entry, parse_latitude, "latitude"),
-            (self.lon_entry, parse_longitude, "longitude"),
-        ):
-            raw = entry.get().strip()
-            if not raw:
-                setattr(self.schedule, attribute, None)
-                entry.delete(0, "end")
-                continue
+        typed = self.place_entry.get().strip()
 
-            parsed = parser(raw)
-            if parsed is None:
-                # Put back the last good value rather than leaving something
-                # that looks accepted but isn't.
-                previous = getattr(self.schedule, attribute)
-                entry.delete(0, "end")
-                if previous is not None:
-                    entry.insert(0, f"{previous:g}")
-            else:
-                setattr(self.schedule, attribute, parsed)
-                entry.delete(0, "end")
-                entry.insert(0, f"{parsed:g}")
+        if not typed:
+            self.schedule.latitude = None
+            self.schedule.longitude = None
+            self.place_note.configure(text="a city name, or \u201clat, lon\u201d")
+        else:
+            found = cities.resolve(typed)
+            if found is None:
+                # Restore rather than leave text sitting there looking accepted.
+                self._restore_place_field()
+                self.place_note.configure(text="no match \u2014 try a nearby larger city")
+                return
+            label, lat, lon = found
+            self.schedule.latitude = lat
+            self.schedule.longitude = lon
+            self.place_entry.delete(0, "end")
+            self.place_entry.insert(0, label)
+            self.place_note.configure(text=f"{lat:.4f}, {lon:.4f}")
 
         self.settings["schedule"] = self.schedule.to_dict()
         self._update_schedule_row()
@@ -864,8 +886,7 @@ class EyeEaseApp(ctk.CTk):
         for entry in (
             self.start_entry,
             self.end_entry,
-            self.lat_entry,
-            self.lon_entry,
+            self.place_entry,
         ):
             entry.configure(
                 state="normal" if on else "disabled",
