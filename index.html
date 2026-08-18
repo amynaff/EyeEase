@@ -77,6 +77,10 @@ body {
   margin: 0 0 28px;
 }
 
+/* "macOS" is a proper noun with deliberate casing; uppercasing it produces
+   "MACOS", which Apple never writes and which reads as a mistake. */
+.nocaps { text-transform: none; }
+
 h1 {
   font-size: clamp(2.5rem, 8.5vw, 5rem);
   line-height: 1.02;
@@ -408,7 +412,7 @@ footer a:hover { color: var(--text); }
 <main>
   <section class="hero wrap">
     <img class="appicon" src="icon-512.png" alt="" width="88" height="88">
-    <p class="kicker">Blue-light filter &amp; flicker-free dimming for macOS</p>
+    <p class="kicker">Blue-light filter &amp; flicker-free dimming for <span class="nocaps">macOS</span></p>
     <h1>It knows when<br>your <span class="lens">evening</span> is.</h1>
     <p class="lede">
       EyeEase warms your screen past where Night Shift stops — following the sun
