@@ -10,6 +10,20 @@
 <meta property="og:description" content="Warms your screen as the light actually goes, wherever you live. Free, open source, and it never touches the network.">
 <meta property="og:type" content="website">
 
+<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+
+<!-- Absolute URLs: the platforms that fetch these do it from their own
+     servers, where a relative path resolves to nothing. -->
+<meta property="og:image" content="https://amynaff.github.io/EyeEase/share-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://amynaff.github.io/EyeEase/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://amynaff.github.io/EyeEase/share-card.png">
+
+
 <style>
 /* Palette is lifted straight from the app's brand.py, so the site and the
    product can't drift apart. The accent is the red-orange of blue-blocker
@@ -45,6 +59,13 @@ body {
 .wrap { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 24px; }
 
 /* ---------- hero ---------- */
+.appicon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 26px;
+  display: block;
+  border-radius: 20px;
+}
 .hero { padding: clamp(72px, 14vh, 140px) 0 clamp(48px, 8vh, 88px); text-align: center; }
 
 .kicker {
@@ -386,6 +407,7 @@ footer a:hover { color: var(--text); }
 
 <main>
   <section class="hero wrap">
+    <img class="appicon" src="icon-512.png" alt="" width="88" height="88">
     <p class="kicker">Blue-light &amp; flicker filter for macOS</p>
     <h1>It knows when<br>your <span class="lens">evening</span> is.</h1>
     <p class="lede">
