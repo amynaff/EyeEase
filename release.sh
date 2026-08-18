@@ -65,10 +65,21 @@ echo "==> Verifying the signature and the hardened runtime"
 codesign --verify --deep --strict --verbose=2 dist/EyeEase.app
 # Notarisation is refused without the hardened runtime, and the failure
 # arrives minutes later from Apple rather than here, so check it now.
-if ! codesign -d --verbose=2 dist/EyeEase.app 2>&1 | grep -q "flags=.*runtime"; then
-  echo "    the hardened runtime is not enabled — notarisation would be rejected"
-  exit 1
-fi
+#
+# Captured into a variable rather than piped into `grep -q`. Under
+# `set -o pipefail` that pipe is a race: grep -q exits at the first match,
+# codesign then dies of SIGPIPE, and the pipeline reports failure — but only
+# when codesign hadn't finished writing yet. It passed and failed on
+# alternating runs against an identical, correctly signed app.
+SIGNATURE="$(codesign -d --verbose=2 dist/EyeEase.app 2>&1)"
+case "$SIGNATURE" in
+  *"(runtime"*) ;;
+  *)
+    echo "    the hardened runtime is not enabled — notarisation would be rejected"
+    echo "$SIGNATURE" | grep -i flags || true
+    exit 1
+    ;;
+esac
 echo "    signed, hardened runtime on"
 
 echo "==> Zipping for submission"
