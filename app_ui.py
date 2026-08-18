@@ -14,6 +14,8 @@ finger. intensity_to_kelvin() below is the only place that mapping lives.
 import atexit
 import json
 import os
+from datetime import datetime
+
 import customtkinter as ctk
 
 from gamma import (
@@ -25,6 +27,7 @@ from gamma import (
 from auto_schedule import Schedule, parse_hhmm
 import brand
 import cities
+import ring
 import startup
 import tray
 
@@ -162,6 +165,7 @@ class EyeEaseApp(ctk.CTk):
         self._drag_offset = None
         self._chrome_stripped = False
         self._gamma_failed = False
+        self._ring_job = None
         # Set once the menu-bar icon exists; until then the mark can't
         # follow the state because there's nothing to re-draw.
         self._tray_icon = None
@@ -345,39 +349,74 @@ class EyeEaseApp(ctk.CTk):
         self._make_draggable(wordmark)
         self._make_draggable(self.status_dot)
 
+    RING_SIZE = 156
+
     def _build_sliders(self):
+        """The day ring, then the two controls that feed it.
+
+        The ring replaced a pair of tall vertical sliders. Those worked, but
+        they were also the single most recognisable thing about a competitor's
+        panel, and they gave the schedule — the part of this app nothing else
+        does — no presence at all.
+        """
+        card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=14)
+        card.pack(fill="x", padx=22, pady=(0, 10))
+
+        holder = ctk.CTkFrame(card, fg_color="transparent",
+                              width=self.RING_SIZE, height=self.RING_SIZE)
+        holder.pack(pady=(14, 14))
+        holder.pack_propagate(False)
+
+        self.ring_label = ctk.CTkLabel(holder, text="")
+        self.ring_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Native labels sit over the rendered ring rather than being drawn
+        # into it: text stays crisp, and updating a reading doesn't mean
+        # re-rendering 360 wedges.
+        self.warmth_readout = ctk.CTkLabel(
+            holder, text="", font=ctk.CTkFont(size=24, weight="bold"),
+            text_color=TEXT,
+        )
+        self.warmth_readout.place(relx=0.5, rely=0.43, anchor="center")
+
+        self.ring_status = ctk.CTkLabel(
+            holder, text="", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED,
+        )
+        self.ring_status.place(relx=0.5, rely=0.60, anchor="center")
+
+        self.warmth_slider = self._add_slider_row(
+            "WARMTH", self.settings["intensity"], 0.0
+        )
+        self.brightness_slider, self.brightness_readout = self._add_slider_row(
+            "BRIGHTNESS", self.settings["brightness"], 0.15, with_readout=True
+        )
+
+    def _add_slider_row(self, label, initial, min_val, with_readout=False):
+        """A horizontal slider with its label and, optionally, its value."""
         row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=22, pady=(0, 14))
-        row.grid_columnconfigure((0, 1), weight=1, uniform="sliders")
+        row.pack(fill="x", padx=22, pady=(0, 10))
 
-        self.warmth_slider, self.warmth_readout = self._add_slider_column(
-            row, 0, "WARMTH", self.settings["intensity"], min_val=0.0
-        )
-        self.brightness_slider, self.brightness_readout = self._add_slider_column(
-            row, 1, "BRIGHTNESS", self.settings["brightness"], min_val=0.15
-        )
-
-    def _add_slider_column(self, parent, column, label, initial, min_val):
-        """One labelled vertical slider with a big value readout underneath."""
-        col = ctk.CTkFrame(parent, fg_color=SURFACE, corner_radius=14)
-        col.grid(row=0, column=column, sticky="nsew", padx=(0, 10) if column == 0 else (10, 0))
-
+        head = ctk.CTkFrame(row, fg_color="transparent")
+        head.pack(fill="x")
         ctk.CTkLabel(
-            col,
-            text=label,
-            font=ctk.CTkFont(size=11, weight="bold"),
+            head, text=label, font=ctk.CTkFont(size=9, weight="bold"),
             text_color=TEXT_MUTED,
-        ).pack(pady=(16, 10))
+        ).pack(side="left")
+
+        readout = None
+        if with_readout:
+            readout = ctk.CTkLabel(
+                head, text="", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED
+            )
+            readout.pack(side="right")
 
         slider = ctk.CTkSlider(
-            col,
+            row,
             from_=min_val,
             to=1.0,
-            orientation="vertical",
-            height=158,
-            width=18,
-            button_length=22,
-            corner_radius=9,
+            height=16,
+            button_length=8,
+            corner_radius=8,
             fg_color=SURFACE_HI,
             progress_color=ACCENT,
             button_color=TEXT,
@@ -385,14 +424,35 @@ class EyeEaseApp(ctk.CTk):
             command=lambda v: self._on_slider_change(),
         )
         slider.set(initial)
-        slider.pack()
+        slider.pack(fill="x", pady=(4, 0))
 
-        readout = ctk.CTkLabel(
-            col, text="", font=ctk.CTkFont(size=17, weight="bold"), text_color=TEXT
+        return (slider, readout) if with_readout else slider
+
+    def _redraw_ring(self):
+        """Re-render the ring. Debounced by its caller, not cheap enough to
+        run on every pixel of a slider drag."""
+        image = ring.render(
+            self.RING_SIZE,
+            self.schedule,
+            self.settings["intensity"],
+            datetime.now().astimezone(),
+            self.settings["auto"],
+            self.settings["is_on"],
         )
-        readout.pack(pady=(12, 16))
+        self._ring_image = ctk.CTkImage(
+            light_image=image, dark_image=image,
+            size=(self.RING_SIZE, self.RING_SIZE),
+        )
+        self.ring_label.configure(image=self._ring_image)
 
-        return slider, readout
+    def _queue_ring_redraw(self):
+        if self._ring_job is not None:
+            self.after_cancel(self._ring_job)
+        self._ring_job = self.after(120, self._flush_ring)
+
+    def _flush_ring(self):
+        self._ring_job = None
+        self._redraw_ring()
 
     def _build_presets(self):
         row = ctk.CTkFrame(self, fg_color="transparent")
@@ -880,7 +940,10 @@ class EyeEaseApp(ctk.CTk):
     def _update_schedule_row(self):
         on = self.settings["auto"]
         self.schedule_status.configure(
-            text=self.schedule.status_line() if on else "off",
+            # Deliberately terse: the ring's centre already carries the full
+            # sentence, and two copies of it a few centimetres apart read as
+            # a bug rather than emphasis.
+            text=("on" if self.schedule.is_usable() else "needs a place") if on else "off",
             text_color=ACCENT if on and self.schedule.fading() else TEXT_MUTED,
         )
         for entry in (
@@ -1168,6 +1231,8 @@ class EyeEaseApp(ctk.CTk):
             self.brightness_readout.configure(
                 text=f"{int(round(brightness * 100))}%"
             )
+            self._update_ring_status()
+            self._queue_ring_redraw()
             self._update_preset_highlight(kelvin, brightness)
             return
 
@@ -1181,7 +1246,23 @@ class EyeEaseApp(ctk.CTk):
         )
         self.brightness_readout.configure(text=f"{int(round(brightness * 100))}%")
 
+        self._update_ring_status()
+        self._queue_ring_redraw()
         self._update_preset_highlight(kelvin, brightness)
+
+    def _update_ring_status(self):
+        """The line under the ring's reading.
+
+        With auto on this is the schedule talking; with it off the ring is a
+        flat band and saying anything about sunset would be describing a
+        curve that isn't being followed.
+        """
+        if not self.settings["is_on"]:
+            self.ring_status.configure(text="off")
+        elif self.settings["auto"] and self.schedule.is_usable():
+            self.ring_status.configure(text=self.schedule.status_line())
+        else:
+            self.ring_status.configure(text="manual")
 
     def _update_preset_highlight(self, kelvin, brightness):
         """Light up whichever preset the current values correspond to, so the
@@ -1300,6 +1381,9 @@ class EyeEaseApp(ctk.CTk):
         """Call this before quitting so the screen doesn't stay tinted."""
         self._cancel_animation()
         self._stop_ticking()
+        if self._ring_job is not None:
+            self.after_cancel(self._ring_job)
+            self._ring_job = None
         if self._save_job is not None:
             self.after_cancel(self._save_job)
             self._save_job = None
