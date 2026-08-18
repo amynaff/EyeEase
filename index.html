@@ -106,6 +106,76 @@ h1 .blue  { color: var(--blue); }
 .meta a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .meta a:hover { color: var(--text); }
 
+/* ---------- support ---------- */
+.tip { padding-block: clamp(40px, 7vh, 72px); }
+.tipgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 200px);
+  gap: clamp(24px, 5vw, 48px);
+  align-items: center;
+  margin-top: 34px;
+}
+@media (max-width: 640px) {
+  .tipgrid { grid-template-columns: 1fr; }
+}
+.tiph { font-size: clamp(1.3rem, 3vw, 1.7rem); margin: 0 0 12px; letter-spacing: -0.02em; }
+.tipnote { color: #c9c9d1; margin: 0 0 22px; max-width: 46ch; }
+
+.addr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid #2a2a32;
+  border-radius: 12px;
+  padding: 10px 10px 10px 16px;
+  max-width: 420px;
+}
+.addr code {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  color: var(--text);
+  flex: 1;
+  overflow-x: auto;
+}
+.copy {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  background: var(--lens);
+  color: var(--ink);
+  flex-shrink: 0;
+  transition: background-color .15s ease;
+}
+.copy:hover { background: var(--lens-bright); }
+.copy:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.copy.done { background: var(--blue); color: #00111a; }
+
+.tipfine { color: var(--muted); font-size: 0.85rem; margin: 14px 0 0; max-width: 46ch; }
+
+.qrwrap { margin: 0; text-align: center; }
+/* White plate behind the code: scanners want the quiet zone light, and the
+   page is near-black. */
+.qr {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  max-width: 180px;
+  margin: 0 auto 12px;
+}
+.qr svg { display: block; }
+.qrwrap figcaption {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* ---------- demo ---------- */
 .demo { padding-block: clamp(40px, 7vh, 72px); }
 
@@ -343,12 +413,10 @@ footer a:hover { color: var(--text); }
          warning is alarming, it says the word malware, and someone meeting
          it cold will assume the app is unsafe and delete it. -->
     <p class="firstrun">
-      <strong>Opening it the first time:</strong> macOS will say it can't
-      check the app for malware. That's because it isn't signed with an Apple
-      certificate yet, not because anything is wrong with it — the source is
-      right there to read. Open <em>System&nbsp;Settings → Privacy&nbsp;&amp;
-      Security</em>, scroll down, and click <em>Open&nbsp;Anyway</em>. Once
-      only.
+      <strong>Signed and notarised by Apple.</strong> Download it, drag it to
+      Applications, open it. No security warning, no right-click trick, no
+      trip into Settings — macOS checks it with Apple and lets it run like
+      anything else you'd install.
     </p>
   </section>
 
@@ -435,6 +503,38 @@ footer a:hover { color: var(--text); }
         is carried inside the app, so knowing where the sun is never means
         telling anyone where you are.
       </p>
+    </div>
+  </section>
+
+  <section class="tip wrap" id="support">
+    <hr class="rule">
+    <div class="tipgrid">
+      <div>
+        <p class="kicker">If it helps your eyes</p>
+        <h3 class="tiph">Free, and staying that way.</h3>
+        <p class="tipnote">
+          No licence to buy, no pro tier, nothing to unlock — the whole thing
+          is on GitHub under the MIT licence. If it saved you a headache and
+          you'd like to send something back, here's where.
+        </p>
+
+        <div class="addr">
+          <code id="lnaddr">amy@radar.cash</code>
+          <button class="copy" id="copyaddr" type="button"
+                  aria-label="Copy Lightning address">Copy</button>
+        </div>
+        <p class="tipfine">
+          A Lightning address — paste it into any Lightning wallet, or scan
+          the code. Nothing here talks to a payment processor: the address is
+          plain text on the page and the code is drawn into the HTML, so this
+          page still makes no network requests of its own.
+        </p>
+      </div>
+
+      <figure class="qrwrap">
+        <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" width="100%" height="100%" class="segno"><path fill="#fff" d="M0 0h29v29h-29z"/><path class="qrline" stroke="#0b0b0d" d="M2 2.5h7m3 0h1m1 0h1m1 0h2m2 0h7m-25 1h1m5 0h1m2 0h4m2 0h2m1 0h1m5 0h1m-25 1h1m1 0h3m1 0h1m3 0h1m3 0h1m3 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m3 0h2m2 0h2m2 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m3 0h1m1 0h2m1 0h2m1 0h1m1 0h3m1 0h1m-25 1h1m5 0h1m1 0h2m4 0h3m1 0h1m5 0h1m-25 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-10 1h2m-17 1h1m2 0h1m1 0h2m1 0h1m2 0h3m2 0h2m1 0h1m-20 1h1m2 0h2m3 0h1m1 0h2m4 0h1m1 0h2m3 0h2m-24 1h2m1 0h4m1 0h1m1 0h1m9 0h4m-25 1h1m1 0h1m2 0h1m6 0h3m3 0h1m1 0h1m2 0h1m-24 1h1m2 0h1m2 0h1m3 0h4m3 0h2m-18 1h2m1 0h1m2 0h2m2 0h2m4 0h3m1 0h1m1 0h2m-25 1h1m2 0h1m2 0h1m2 0h1m2 0h2m2 0h3m1 0h1m1 0h1m1 0h1m-24 1h3m1 0h1m1 0h1m1 0h1m2 0h4m4 0h1m2 0h1m-24 1h2m1 0h4m3 0h3m3 0h8m-16 1h1m1 0h1m2 0h4m3 0h1m3 0h1m-25 1h7m2 0h2m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h3m-25 1h1m5 0h1m1 0h2m1 0h1m2 0h1m1 0h1m3 0h1m1 0h2m-24 1h1m1 0h3m1 0h1m3 0h5m1 0h5m2 0h1m-24 1h1m1 0h3m1 0h1m1 0h4m1 0h2m4 0h2m1 0h1m-23 1h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m-25 1h1m5 0h1m6 0h1m2 0h3m1 0h1m-21 1h7m1 0h6m1 0h4m4 0h2"/></svg></div>
+        <figcaption>Scan with a Lightning wallet</figcaption>
+      </figure>
     </div>
   </section>
 </main>
@@ -586,6 +686,31 @@ places.forEach(button => {
 
 slider.addEventListener('input', draw);
 draw();
+
+const copyBtn = document.getElementById('copyaddr');
+if (copyBtn) {
+  copyBtn.addEventListener('click', async () => {
+    const addr = document.getElementById('lnaddr').textContent.trim();
+    try {
+      await navigator.clipboard.writeText(addr);
+    } catch {
+      // Clipboard API needs a secure context and permission; if it is
+      // refused the address is still selectable text on the page, so say
+      // what happened rather than silently doing nothing — and put the
+      // label back, or the button reads 'Select it' forever after one
+      // refusal and looks broken.
+      copyBtn.textContent = 'Select it';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+      return;
+    }
+    copyBtn.textContent = 'Copied';
+    copyBtn.classList.add('done');
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('done');
+    }, 1800);
+  });
+}
 </script>
 
 </body>
