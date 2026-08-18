@@ -46,11 +46,12 @@ def _from_julian(julian: float) -> datetime:
     return datetime.fromtimestamp((julian - 2440587.5) * 86400.0, tz=timezone.utc)
 
 
-def solar_events(latitude: float, longitude: float, day: datetime):
-    """Returns (sunrise, sunset) as aware UTC datetimes for the given day.
+def _sun_for_day(longitude: float, day: datetime):
+    """(declination in radians, solar transit as a Julian date) for a date.
 
-    Returns (None, None) when the sun doesn't rise or set at all — the polar
-    summer/winter case, where the hour-angle equation has no solution.
+    Shared by the sunrise equation and the elevation calculation, which need
+    exactly the same two quantities — the sun's tilt that day, and the moment
+    it crosses due south.
     """
     # Julian day number for solar noon on the requested date.
     midday = day.replace(hour=12, minute=0, second=0, microsecond=0)
@@ -81,6 +82,39 @@ def solar_events(latitude: float, longitude: float, day: datetime):
     declination = math.asin(
         math.sin(ecliptic_lon) * math.sin(math.radians(23.44))
     )
+    return declination, solar_transit
+
+
+def solar_elevation(latitude: float, longitude: float, when: datetime) -> float:
+    """How high the sun is above the horizon, in degrees, at a moment.
+
+    Negative below the horizon. This is what makes the warming curve a real
+    curve: sunset is a single instant, but elevation changes continuously all
+    day, and how fast it changes depends on latitude and time of year. A
+    January evening in Reykjavík slides toward night far more gradually than
+    a June evening in Quito, and driving warmth from this reproduces that
+    instead of ramping for a fixed number of minutes everywhere.
+    """
+    declination, transit = _sun_for_day(longitude, when)
+
+    # Hour angle: the Earth turns 360° per day, measured from solar noon.
+    hour_angle = math.radians((_to_julian(when) - transit) * 360.0)
+
+    lat = math.radians(latitude)
+    sin_elevation = (
+        math.sin(lat) * math.sin(declination)
+        + math.cos(lat) * math.cos(declination) * math.cos(hour_angle)
+    )
+    return math.degrees(math.asin(max(-1.0, min(1.0, sin_elevation))))
+
+
+def solar_events(latitude: float, longitude: float, day: datetime):
+    """Returns (sunrise, sunset) as aware UTC datetimes for the given day.
+
+    Returns (None, None) when the sun doesn't rise or set at all — the polar
+    summer/winter case, where the hour-angle equation has no solution.
+    """
+    declination, solar_transit = _sun_for_day(longitude, day)
 
     lat = math.radians(latitude)
     numerator = math.sin(math.radians(SOLAR_ZENITH_DEG)) - math.sin(lat) * math.sin(
@@ -152,6 +186,23 @@ def parse_latitude(text):
 
 def parse_longitude(text):
     return _parse_coordinate(text, 180.0)
+
+
+# Where the warming begins and ends, in degrees of sun elevation.
+#
+# ELEVATION_DAY is deliberately above the horizon: the light is already
+# reddening and dimming well before the sun touches it, so waiting for sunset
+# itself would make the change arrive late and then hurry. ELEVATION_NIGHT is
+# the standard civil-twilight angle — the point at which outdoor light is
+# genuinely gone.
+ELEVATION_DAY = 10.0
+ELEVATION_NIGHT = -6.0
+
+
+def elevation_night_fraction(elevation: float) -> float:
+    """Sun elevation -> how much of the night setting applies, 0.0 to 1.0."""
+    span = ELEVATION_DAY - ELEVATION_NIGHT
+    return _smoothstep((ELEVATION_DAY - elevation) / span)
 
 
 def _smoothstep(t: float) -> float:
@@ -226,6 +277,17 @@ class Schedule:
         Values in between mean a fade is in progress.
         """
         now = now or datetime.now().astimezone()
+
+        # With coordinates we can do better than a timed ramp. Elevation is a
+        # continuous quantity, so the screen tracks the sun actually going
+        # down rather than starting a stopwatch when it crosses the horizon.
+        # The curve's shape then comes from your latitude and the date, which
+        # is the whole point of asking for coordinates in the first place.
+        if self.mode == "solar" and self.latitude is not None and self.longitude is not None:
+            return elevation_night_fraction(
+                solar_elevation(self.latitude, self.longitude, now)
+            )
+
         events = self._all_events(now)
         if not events:
             return 0.0
@@ -263,11 +325,52 @@ class Schedule:
         upcoming = [e for e in self._all_events(now) if e[0] > now]
         return upcoming[0] if upcoming else None
 
+    def _elevation_driven(self):
+        return (
+            self.mode == "solar"
+            and self.latitude is not None
+            and self.longitude is not None
+        )
+
+    def next_change(self, now=None, horizon_hours=24):
+        """When the screen next starts or finishes changing.
+
+        Sunset is the wrong thing to quote once warmth follows elevation:
+        the screen begins warming while the sun is still up, so promising
+        "neutral until sunset" describes a screen that is already changing.
+        This finds the moment the curve itself crosses in or out of a fade,
+        by walking it forward — there's no closed form for "when does
+        elevation reach 10°" that's worth the algebra.
+        """
+        now = now or datetime.now().astimezone()
+        start = self.night_fraction(now)
+        settled_now = start <= 0.02 or start >= 0.98
+
+        step = timedelta(minutes=2)
+        t = now
+        for _ in range(int(horizon_hours * 30)):
+            t += step
+            fraction = self.night_fraction(t)
+            settled = fraction <= 0.02 or fraction >= 0.98
+            if settled != settled_now:
+                return t
+        return None
+
     def status_line(self, now=None):
         """Short human description of what the schedule is doing, for the UI."""
         now = now or datetime.now().astimezone()
         if not self.is_usable():
             return "enter coordinates" if self.mode == "solar" else "set a time"
+
+        if self._elevation_driven():
+            fraction = self.night_fraction(now)
+            if 0.02 < fraction < 0.98:
+                return f"easing — {int(round(fraction * 100))}% warm"
+            change = self.next_change(now)
+            if change is None:
+                return "warm all day" if fraction >= 0.98 else "neutral all day"
+            when = change.strftime("%H:%M")
+            return f"warm until {when}" if fraction >= 0.98 else f"neutral until {when}"
 
         fraction = self.night_fraction(now)
         upcoming = self.next_event(now)
