@@ -60,7 +60,41 @@ def run_tray(app):
     # after which the status item exists and can be re-drawn.
     app.attach_tray(icon)
     _restore_display_on_terminate(app)
+    _hide_from_dock(app)
     return icon
+
+
+def _hide_from_dock(app):
+    """Put the app back in the menu bar, where LSUIElement asked for it.
+
+    The bundle sets LSUIElement and macOS honours it — then Tk takes it
+    back. tkMacOSXInit.c's applicationDidFinishLaunching: calls
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular]
+    unconditionally, with no check for LSUIElement, so a Tk app gets a Dock
+    icon and a Cmd-Tab entry however the bundle is configured.
+
+    Deferred, because finishLaunching runs asynchronously — Tk's own source
+    calls that race out. Setting the policy before Tk's override lands would
+    only be overridden in turn. Staggered past app_ui.py's _strip_chrome
+    (80ms) rather than sharing its slot.
+    """
+    if sys.platform != "darwin":
+        return
+
+    def apply():
+        try:
+            from AppKit import (
+                NSApplication,
+                NSApplicationActivationPolicyAccessory,
+            )
+            NSApplication.sharedApplication().setActivationPolicy_(
+                NSApplicationActivationPolicyAccessory
+            )
+        except (ImportError, AttributeError):
+            # No pyobjc: a stray Dock icon, not a broken app.
+            pass
+
+    app.after(120, apply)
 
 
 def force_redraw(icon):
