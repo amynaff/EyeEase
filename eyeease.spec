@@ -60,7 +60,7 @@ app = BUNDLE(
     info_plist={
         # Menu-bar-only utility: no Dock icon, no app switcher entry.
         "LSUIElement": True,
-        "CFBundleShortVersionString": "0.1.0",
+        "CFBundleShortVersionString": "0.2.0",
         "NSHighResolutionCapable": True,
     },
 )
