@@ -81,6 +81,11 @@ TICK_MS = 30_000
 # is off — _hold_pwm_safe() returns before touching the display.
 HOLD_MS = 2_000
 
+# How often to check for a tray click. Short enough that "Show panel" or
+# "Quit" feels immediate; see the note on self._tray_request in __init__
+# for why tray.py can't just call .after() itself.
+TRAY_POLL_MS = 50
+
 # Fixed width; height is measured from the content in _fit_to_content().
 PANEL_WIDTH = 360
 
@@ -169,6 +174,17 @@ class EyeEaseApp(ctk.CTk):
         # Set once the menu-bar icon exists; until then the mark can't
         # follow the state because there's nothing to re-draw.
         self._tray_icon = None
+        # Set by tray.py's click handlers, which run on AppKit's own menu-
+        # tracking callback rather than in Tcl's callback chain. Calling
+        # .after() from there corrupts the interpreter's saved thread state
+        # (Tcl's _tkinter releases the GIL around Tcl_DoOneEvent and expects
+        # to be the only one restoring it) and aborts the process a moment
+        # later, on the next unrelated .after() callback. So the click
+        # handlers only set this plain attribute — no Tcl call, nothing to
+        # corrupt — and _start_tray_polling()'s loop, running on this app's own
+        # after() loop, is what actually acts on it.
+        self._tray_request = None
+        self._tray_job = None
         # Parked by tray.py; see _restore_display_on_terminate() for why it
         # has to be held rather than discarded.
         self.terminate_observer = None
@@ -209,6 +225,7 @@ class EyeEaseApp(ctk.CTk):
             self._sync_zero_blue_controls()
         self._apply_current()
         self._start_ticking()
+        self._start_tray_polling()
         # Deferred so the window is mapped first — see _strip_chrome().
         self.after(80, self._strip_chrome)
 
@@ -988,11 +1005,25 @@ class EyeEaseApp(ctk.CTk):
         self._hold_job = self.after(HOLD_MS, hold)
 
     def _stop_ticking(self):
-        for attribute in ("_tick_job", "_hold_job"):
+        for attribute in ("_tick_job", "_hold_job", "_tray_job"):
             job = getattr(self, attribute)
             if job is not None:
                 self.after_cancel(job)
                 setattr(self, attribute, None)
+
+    def _start_tray_polling(self):
+        """See the note on self._tray_request in __init__ for why this
+        exists instead of tray.py calling .after() directly."""
+
+        def poll():
+            self._tray_job = self.after(TRAY_POLL_MS, poll)
+            request, self._tray_request = self._tray_request, None
+            if request == "show":
+                self.show_panel()
+            elif request == "quit":
+                self.on_close()
+
+        self._tray_job = self.after(TRAY_POLL_MS, poll)
 
     def _effective_values(self):
         """The values to actually send to the screen right now.

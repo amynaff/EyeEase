@@ -30,14 +30,16 @@ def run_tray(app):
     """app is the EyeEaseApp instance (a customtkinter window)."""
 
     def on_show(icon, item):
-        # show_panel() rather than deiconify(): the panel is borderless, and
-        # restoring one without raising it looks exactly like a click that
-        # did nothing.
-        app.after(0, app.show_panel)
+        # Setting a plain attribute here, not calling app.after() — this
+        # callback runs on AppKit's own menu-tracking dispatch, not in
+        # Tcl's callback chain, and a direct .after() call from here
+        # corrupts _tkinter's saved thread state and aborts the process a
+        # moment later. app_ui.py's _start_tray_polling() picks this up.
+        app._tray_request = "show"
 
     def on_quit(icon, item):
         icon.stop()
-        app.after(0, app.on_close)
+        app._tray_request = "quit"
 
     icon = pystray.Icon(
         "eyeease",
