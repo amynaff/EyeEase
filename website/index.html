@@ -454,6 +454,16 @@ footer a:hover { color: var(--text); }
       anything else you'd install.
     </p>
 
+    <!-- The app makes no network calls of its own accord, so it can't tell
+         anyone an update exists — that's the tray menu's job, and only when
+         someone actually clicks it. Worth surfacing here since this page is
+         the only other place that update could ever get mentioned. -->
+    <p class="firstrun">
+      <strong>Updates won't find you.</strong> EyeEase never checks the
+      network on its own — click &ldquo;Check for updates&rdquo; in the tray
+      menu now and then to see if a newer build is out.
+    </p>
+
     <p class="firstrun upgrade">
       <strong>Already running 0.1.0 or 0.2.0?</strong> Quit it from the menu
       bar first, then drag the new one to Applications and open it from
