@@ -11,6 +11,13 @@ only real answer to "does this launch at login": a saved flag can drift out
 of sync the moment someone removes the login item themselves, and then the
 switch in the panel would be claiming something untrue. is_enabled() always
 goes and looks.
+
+And it looks at what the login item *says*, not merely that one exists. Both
+the plist and the registry value store an absolute path to a specific copy of
+the app, and copies move: dragged from Downloads to /Applications, replaced
+by a newer download, or left behind next to the one you actually use. A login
+item pointing at a path that is gone launches nothing, so reporting it as "on"
+would be the same lie by a longer route.
 """
 
 import os
@@ -28,9 +35,32 @@ LAUNCH_AGENT_PATH = (
 )
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
+# What macOS puts in the path when it runs an app from a randomised copy.
+TRANSLOCATION_MARKER = "/AppTranslocation/"
+
 
 def is_supported() -> bool:
     return SYSTEM in ("darwin", "win32")
+
+
+def is_translocated() -> bool:
+    """True when macOS is running this app from a randomised throwaway copy.
+
+    Gatekeeper does this — "app translocation" — to a quarantined app that is
+    launched from wherever it was unzipped rather than being moved somewhere
+    first, which is exactly what someone does with a fresh download. The app
+    runs fine, but sys.executable points into a read-only
+    /private/var/folders/.../AppTranslocation/<uuid>/d/ mount that does not
+    survive a reboot.
+
+    So the login item is the one feature translocation quietly breaks: it
+    writes down an address that will not exist by the time launchd needs it,
+    and nothing at login reports the failure. Better to decline and say why.
+
+    Moving EyeEase.app to /Applications in Finder clears the quarantine flag
+    and ends the translocation, which is why that is the advice.
+    """
+    return getattr(sys, "frozen", False) and TRANSLOCATION_MARKER in sys.executable
 
 
 def launch_command():
@@ -49,12 +79,39 @@ def launch_command():
 # -- macOS --------------------------------------------------------------
 
 
+def _macos_recorded_command():
+    """What the installed plist actually tells launchd to run, if anything."""
+    import plistlib
+
+    try:
+        with open(LAUNCH_AGENT_PATH, "rb") as f:
+            recorded = plistlib.load(f).get("ProgramArguments")
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+    return list(recorded) if recorded else None
+
+
 def _macos_is_enabled() -> bool:
-    return LAUNCH_AGENT_PATH.exists()
+    recorded = _macos_recorded_command()
+    if not recorded:
+        return False
+    # A path that no longer exists launches nothing — the plist was written
+    # by a copy that has since been moved, replaced, or was translocated.
+    if not os.path.exists(recorded[0]):
+        return False
+    # It exists but is some other copy: this one is not the one that starts
+    # at login, so the switch says off, and flipping it on re-points the
+    # plist here rather than appearing to do nothing.
+    return recorded == launch_command()
 
 
 def _macos_enable() -> bool:
     import plistlib
+
+    if is_translocated():
+        # Writing the plist would "succeed" and then silently fail at every
+        # login. See is_translocated(); the caller explains the fix.
+        return False
 
     plist = {
         "Label": LABEL,
@@ -107,9 +164,12 @@ def _windows_is_enabled() -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
             value, _ = winreg.QueryValueEx(key, APP_NAME)
-            return bool(value)
     except (FileNotFoundError, OSError):
         return False
+    # Compared against what we would write, not just checked for emptiness:
+    # a value naming a copy in the old download folder is a login item for
+    # that copy, not for this one.
+    return value == _windows_value()
 
 
 def _windows_enable() -> bool:

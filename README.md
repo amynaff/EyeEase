@@ -23,7 +23,40 @@ makes a screen look warm rather than red is the gap between the two curves —
 blue falls away fast while green falls slowly — which is exactly what the
 blackbody curve in `kelvin_to_rgb()` produces.
 
+## Install
+Grab `EyeEase-macOS.zip` (or the Windows build) from
+[Releases](https://github.com/amynaff/EyeEase/releases), then:
+
+**macOS** — unzip it, drag `EyeEase.app` into `/Applications`, and launch it
+from there. Then delete the copy in Downloads.
+
+Both halves of that matter.
+
+Dragging it out of Downloads *before* the first launch is what stops macOS
+running the app from a randomised throwaway copy — Gatekeeper does that to
+any quarantined app launched from where it was unzipped, and the copy is gone
+by the next reboot. The app itself works either way, but "launch at login"
+records an absolute path, and under translocation that path is fiction. If
+you turn the switch on from a translocated copy, EyeEase declines and tells
+you to move it; move it and the switch works.
+
+Deleting the download is what stops you running two copies at once. They both
+drive the gamma ramp on a timer, so the sliders in the panel you're touching
+stop matching the screen — and quitting one hands the display back while the
+other still has its override in place. Newer builds refuse to start a second
+copy, but the tidier fix is not to have one.
+
+**Windows** — unzip somewhere permanent (not Downloads) and run
+`EyeEase.exe`. The login item stores the path you run it from, so moving it
+afterwards means toggling "launch at login" off and on again.
+
+Upgrading: quit EyeEase from the tray first, replace the app, launch it
+again. Your settings live in `~/.eyeease_settings.json` and are untouched.
+
 ## Setup
+This section is for running from source or hacking on it — if you just want
+the app, use **Install** above.
+
 Requires Python 3.9+ with Tk support.
 
 On macOS, check `python3 -c "import tkinter; print(tkinter.TkVersion)"` before
