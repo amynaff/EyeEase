@@ -793,6 +793,15 @@ class EyeEaseApp(ctk.CTk):
 
     def _toggle_login(self):
         turning_on = self.login_switch.get() == 1
+
+        if turning_on and startup.is_translocated():
+            # macOS is running us from a throwaway randomised copy, so any
+            # login item we wrote would point at a path that's gone by the
+            # next boot. Say the one thing that fixes it.
+            self.login_switch.deselect()
+            self.login_note.configure(text="move app to Applications first")
+            return
+
         succeeded = startup.enable() if turning_on else startup.disable()
 
         if not succeeded:
