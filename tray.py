@@ -9,6 +9,7 @@ import sys
 import pystray
 
 from brand import BLUE, LENS, disc_icon
+from update_check import check_for_updates
 
 # Big enough that both menu bars downsample it cleanly; small enough that
 # redrawing it on every on/off click costs nothing worth measuring.
@@ -41,12 +42,22 @@ def run_tray(app):
         icon.stop()
         app._tray_request = "quit"
 
+    def on_check_for_updates(icon, item):
+        # Safe to call straight from this callback, unlike on_show/on_quit
+        # above: it only starts a background thread and, later, posts a
+        # notification directly — not a Tk or AppKit call routed through
+        # this callback's own thread. See update_check.py's module
+        # docstring for why it's NSUserNotificationCenter and not
+        # pystray's own notify().
+        check_for_updates()
+
     icon = pystray.Icon(
         "eyeease",
         make_icon_image(app.settings["is_on"]),
         "EyeEase",
         menu=pystray.Menu(
             pystray.MenuItem("Show panel", on_show, default=True),
+            pystray.MenuItem("Check for updates", on_check_for_updates),
             pystray.MenuItem("Quit", on_quit),
         ),
     )

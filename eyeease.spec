@@ -6,6 +6,10 @@
 # leave it unset and PyInstaller ad-hoc signs, which is fine for local runs
 # and is rejected by Gatekeeper anywhere else.
 import os
+import sys
+
+sys.path.insert(0, SPECPATH)
+from version import APP_VERSION
 
 CODESIGN_IDENTITY = os.environ.get("EYEEASE_CODESIGN_IDENTITY") or None
 ENTITLEMENTS = "entitlements.plist" if CODESIGN_IDENTITY else None
@@ -60,7 +64,7 @@ app = BUNDLE(
     info_plist={
         # Menu-bar-only utility: no Dock icon, no app switcher entry.
         "LSUIElement": True,
-        "CFBundleShortVersionString": "0.2.1",
+        "CFBundleShortVersionString": APP_VERSION,
         "NSHighResolutionCapable": True,
     },
 )
