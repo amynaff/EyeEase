@@ -364,6 +364,15 @@ h1 .blue  { color: var(--blue); }
 }
 .firstrun strong { color: var(--text); }
 .firstrun em { color: var(--text); font-style: normal; font-family: var(--mono); font-size: 0.86rem; }
+/* Secondary to the first-run card above it: this one speaks to the handful of
+   people already running 0.1.0, and everyone else should skip it. They have no
+   other way to hear about an update — the app makes no network calls, and
+   nobody is watching the repo. */
+.firstrun.upgrade {
+  margin-top: 12px;
+  background: none;
+  border-style: dashed;
+}
 
 .caption {
   font-family: var(--mono);
@@ -431,7 +440,7 @@ footer a:hover { color: var(--text); }
     </div>
 
     <p class="meta">
-      macOS 11+ &middot; Apple silicon &middot; Free &amp; open source &middot; v0.2.1 &middot;
+      macOS 11+ &middot; Apple silicon &middot; Free &amp; open source &middot; v0.2.0 &middot;
       <a href="#see">see it in action</a>
     </p>
 
@@ -443,6 +452,14 @@ footer a:hover { color: var(--text); }
       Applications, open it. No security warning, no right-click trick, no
       trip into Settings — macOS checks it with Apple and lets it run like
       anything else you'd install.
+    </p>
+
+    <p class="firstrun upgrade">
+      <strong>Already running 0.1.0?</strong> Quit it from the menu bar first,
+      then drag the new one to Applications and open it from there. Delete the
+      old copy. If &ldquo;launch at login&rdquo; shows as off afterwards, turn
+      it on once more &mdash; 0.1.0 could show that switch as on while nothing
+      actually started at login, and this version checks properly.
     </p>
   </section>
 
