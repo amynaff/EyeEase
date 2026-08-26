@@ -7,4 +7,4 @@ made the website's version label wrong the last time this got bumped by
 hand in two places instead of one.
 """
 
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.2.3"

@@ -113,4 +113,4 @@ spctl --assess --type execute --verbose=4 dist/EyeEase.app
 
 echo
 echo "Done. dist/EyeEase-macOS.zip is ready to upload:"
-echo "  gh release upload v0.2.0 dist/EyeEase-macOS.zip --repo amynaff/EyeEase --clobber"
+echo "  gh release upload v$("$VENV/python" -c 'import version; print(version.APP_VERSION)') dist/EyeEase-macOS.zip --repo amynaff/EyeEase --clobber"
