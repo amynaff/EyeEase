@@ -63,8 +63,20 @@ somewhere permanent (not Downloads) and run it from there — the login item
 stores the path you run it from, so moving it afterwards means toggling
 "launch at login" off and on again.
 
-Upgrading: quit EyeEase from the tray first, replace the app, launch it
-again. Your settings live in `~/.eyeease_settings.json` and are untouched.
+**Upgrading** — quit EyeEase from the tray first, then replace the app in
+`/Applications` and launch it again. Quitting first matters for the same
+reason as deleting the download: two copies both driving the gamma ramp
+leave the screen taking orders from the one you aren't looking at.
+
+Your settings live in `~/.eyeease_settings.json` and are untouched, switch
+positions included, so the app comes back the way you left it.
+
+Finding out there *is* an upgrade is a separate question, because nothing
+here checks on a schedule. **Check for updates** in the tray menu asks
+GitHub for the latest release and says either way — it runs only when you
+click it, never on launch and never on a timer, which is the whole reason
+the app can claim it doesn't reach the network on its own. Failing that,
+[Releases](https://github.com/amynaff/EyeEase/releases) is the list.
 
 ## Setup
 This section is for running from source or hacking on it — if you just want
