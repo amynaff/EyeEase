@@ -1,8 +1,17 @@
 # EyeEase
 
-Free, minimal blue-light blocker for Mac and Windows — same underlying idea
-as RedShift (gamma-table manipulation): two sliders, three presets, one EASE
-button, an auto schedule, and it lives in the tray.
+Free, minimal blue-light blocker — same underlying idea as RedShift
+(gamma-table manipulation): two sliders, three presets, one EASE button, an
+auto schedule, and it lives in the tray.
+
+**Platform status.** macOS is the tested platform: signed, notarised, and
+verified end to end on real hardware. Windows is implemented but
+**unverified** — no part of it has ever been run on a Windows machine. See
+[Windows status](#windows-status) before relying on it.
+
+Either way, EyeEase changes the **primary display only**. A second monitor
+keeps its normal colour — see
+[What's deliberately left out](#whats-deliberately-left-out-of-this-version).
 
 The palette is amber, not an alarm red, because amber is what the app itself
 produces at evening temperatures — the brand is the colour the product makes.
@@ -24,7 +33,7 @@ blue falls away fast while green falls slowly — which is exactly what the
 blackbody curve in `kelvin_to_rgb()` produces.
 
 ## Install
-Grab `EyeEase-macOS.zip` (or the Windows build) from
+Grab `EyeEase-macOS.zip` from
 [Releases](https://github.com/amynaff/EyeEase/releases), then:
 
 **macOS** — unzip it, drag `EyeEase.app` into `/Applications`, and launch it
@@ -46,9 +55,13 @@ stop matching the screen — and quitting one hands the display back while the
 other still has its override in place. Newer builds refuse to start a second
 copy, but the tidier fix is not to have one.
 
-**Windows** — unzip somewhere permanent (not Downloads) and run
-`EyeEase.exe`. The login item stores the path you run it from, so moving it
-afterwards means toggling "launch at login" off and on again.
+**Windows** — there is no verified Windows build to install. Run it from
+source, or build the `.exe` yourself, following
+[Windows status](#windows-status); that section also lists what still needs
+checking on real hardware. If you do end up with an `.exe`, unzip it
+somewhere permanent (not Downloads) and run it from there — the login item
+stores the path you run it from, so moving it afterwards means toggling
+"launch at login" off and on again.
 
 Upgrading: quit EyeEase from the tray first, replace the app, launch it
 again. Your settings live in `~/.eyeease_settings.json` and are untouched.
@@ -186,6 +199,34 @@ Settings are saved to `~/.eyeease_settings.json` (debounced, so a slider drag
 is one write rather than dozens) and restored next launch. Settings files
 written before the Kelvin rewrite stored a 0.0-1.0 `warmth` value; it carries
 over automatically as the equivalent slider position.
+
+## Running the tests
+```
+python3 -m unittest discover -s tests -t .
+```
+
+No dependencies and no test runner to install — plain `unittest` from the
+standard library, so this works on a fresh checkout on any platform,
+including the Windows machine this still needs to be run on.
+
+They cover the pure functions in `gamma.py` and `auto_schedule.py`: the
+blackbody curve, the ramps handed to the OS, coordinate and time parsing,
+the sunrise equation, and the fade. Deliberately not the OS calls or the Tk
+panel — those need real hardware and a real display, and the checklists in
+this README are where they're tracked instead.
+
+That split is the point. Everything under test here fails *quietly*: a ramp
+with a rounding error, a sunset an hour off, a dropped hemisphere letter
+that turns 74°W into 74°E. None of it raises, none of it logs, and the
+screen just looks or behaves slightly wrong — which nobody reports, they
+just stop using the app. The crashes get found; this is the class that
+doesn't.
+
+Each test is written to fail for one reason. Where an assertion could pass
+for the wrong reason it says so in a comment — `test_blue_is_zeroed_
+defensively_not_just_because_the_curve_says_so` exists because at 1200K the
+blackbody curve already returns zero blue, so deleting the explicit guard in
+`build_ramp` leaves every other test in the file green.
 
 ## Sunset/sunrise mode, and how it learns where you are
 `auto_schedule.py` implements the standard sunrise equation, so the schedule
@@ -394,7 +435,19 @@ without a stapled ticket Gatekeeper has to ask Apple, and refuses when it
 can't. The script re-zips afterwards, because stapling changes the bundle
 and the archive made before it is already out of date.
 
-## Packaging into a real .exe (Windows)
+## Windows status
+Windows support is **unverified**. Every code path exists — `gamma.py` has a
+`SetDeviceGammaRamp` implementation, `startup.py` writes a `Run` key,
+`singleton.py` locks a byte with `msvcrt.locking` — and none of it has been
+executed on a Windows machine, because there wasn't one in the environment
+this was built in. The macOS `.app` went through a full pass on real
+hardware (launched, tray icon clicked, panel shown, quit confirmed). The
+Windows side has had none of that.
+
+Treat it as source that ought to work, not as a product that does. The
+checklist at the end of this section is the outstanding work.
+
+### Packaging into a real .exe
 ```
 pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm eyeease-windows.spec
@@ -405,12 +458,6 @@ console window. Must be run with PyInstaller *on Windows* — PyInstaller
 can't cross-compile, and the spec deliberately refuses to run on any other
 OS rather than silently producing a same-platform binary with the wrong
 name (which is what a plain PyInstaller run would otherwise do).
-
-This spec is untested on real Windows — there's no Windows machine in the
-environment this was built in. The macOS `.app` above went through a full
-verification pass (launched, tray icon clicked, panel shown, quit
-confirmed); treat the Windows build as a starting point that needs the
-same pass on real hardware before you'd trust it.
 
 ### The one Windows thing most likely to bite
 Windows sanity-checks gamma ramps and refuses any it considers too far from
