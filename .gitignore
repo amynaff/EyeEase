@@ -1,0 +1,9 @@
+# This branch is the published site and nothing else.
+# It once carried a full copy of dist/ and build/ — 121 MB of built app —
+# because a publish copied the whole project folder instead of website/.
+
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
