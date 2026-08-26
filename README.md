@@ -165,6 +165,23 @@ A small panel appears with:
   It was called "PWM-safe mode". The acronym meant nothing to anyone who
   hadn't already researched the problem, which is precisely the audience the
   feature exists for.
+- **Paper contrast** — lifts the bottom of the gamma ramp so black comes out
+  dark grey instead of black. Warmth is only half of why a screen is harder
+  to read at night than a page; the other half is contrast. Ink on paper
+  measures around 15:1, an LCD runs 1000:1 or more, and it's pure white
+  sitting directly against pure black that stings.
+
+  The floor is 0.17 in encoded units, which lands near a 49:1 ratio — softer
+  than the panel, deliberately short of paper's 15:1, because matching that
+  exactly needs a floor around 0.29 and reads as washed-out on a screen
+  you're also working on. Only the floor moves: white stays white, because
+  pulling the top down is what the brightness slider already does and doing
+  it in two places would make the two controls fight.
+
+  It composes with everything else rather than overriding it. Warmth still
+  tints, brightness still dims, and zero blue still wins — a lifted floor
+  multiplied by a zero blue channel is still zero, so this can't put blue
+  back.
 - **The menu-bar icon shows the state** — amber while the app is easing the
   screen, blue while it isn't. Blue is the light that reaches you when
   nothing is filtering it, so the icon says what's happening to your screen
@@ -221,6 +238,15 @@ that turns 74°W into 74°E. None of it raises, none of it logs, and the
 screen just looks or behaves slightly wrong — which nobody reports, they
 just stop using the app. The crashes get found; this is the class that
 doesn't.
+
+One trap worth knowing about first. Apple's system Python 3.9 does not put
+bytecode in a `__pycache__` beside the source — it redirects it to
+`~/Library/Caches/com.apple.python/<full source path>/`. So the usual
+`find . -name __pycache__ -delete` clears nothing, and because the cache is
+validated on source mtime and *size*, an edit that changes neither (0.17 to
+0.34, say) can be served stale. Tests then run against code you already
+changed, which is worse than no tests at all. `python3 -B`, plus clearing
+that path when something looks impossible, is the reliable combination.
 
 Each test is written to fail for one reason. Where an assertion could pass
 for the wrong reason it says so in a comment — `test_blue_is_zeroed_

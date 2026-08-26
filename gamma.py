@@ -48,6 +48,26 @@ KELVIN_NEUTRAL = 6500
 KELVIN_MIN = 1200
 KELVIN_MAX = 6500
 
+# Paper mode lifts the bottom of the ramp so black comes out dark grey
+# instead of black, which is the single biggest difference between reading
+# off a screen and reading off a page. Paper is not warm so much as it is
+# *low contrast*: ink on paper measures somewhere around 15:1, while an LCD
+# runs 1000:1 or more, and it's that gap — pure white sitting directly
+# against pure black — that stings at night, not the colour temperature.
+#
+# The number is in encoded (gamma-corrected) units, not luminance, because
+# that's what a gamma ramp holds. Display luminance goes roughly as the 2.2
+# power of the encoded value, so a floor of 0.17 lands at 0.17 ** 2.2 =
+# 0.0203 of white — a contrast ratio near 49:1. That is deliberately short of
+# real paper: matching 15:1 exactly needs a floor around 0.29, which reads
+# as washed-out on a screen you're also using for other things. 43:1 is
+# clearly softer than the panel without looking broken.
+#
+# Only the floor moves. The top of the ramp stays at full, because dimming
+# the whole picture is what the brightness slider already does, and doing it
+# in two places would make the two controls fight.
+PAPER_BLACK_FLOOR = 0.17
+
 # How far PWM-safe mode nudges the backlight when testing whether it can
 # drive it at all. Big enough to read back reliably, small enough that the
 # momentary blip isn't worth noticing.
@@ -120,8 +140,20 @@ def kelvin_to_hex(kelvin: float, brightness: float = 1.0, zero_blue: bool = Fals
     )
 
 
-def build_ramp(kelvin: float, brightness: float, zero_blue: bool = False):
+def build_ramp(
+    kelvin: float,
+    brightness: float,
+    zero_blue: bool = False,
+    paper: bool = False,
+):
     """Returns three lists of 256 ints (0-65535) for R, G, B.
+
+    paper raises the bottom of every channel to PAPER_BLACK_FLOOR, so the
+    darkest pixel the screen can produce becomes dark grey. See that constant
+    for why the floor sits where it does. It composes with everything else:
+    warmth still tints, brightness still dims, and zero_blue still wins on
+    the blue channel — a lifted floor multiplied by a zero blue multiplier is
+    still zero, so paper mode cannot put blue back.
 
     zero_blue drops the blue ramp to flat zero and pins the temperature to
     KELVIN_MIN. Two things are worth being precise about:
@@ -151,9 +183,17 @@ def build_ramp(kelvin: float, brightness: float, zero_blue: bool = False):
     if zero_blue:
         kb = 0.0
 
+    floor = PAPER_BLACK_FLOOR if paper else 0.0
+
     red, green, blue = [], [], []
     for i in range(RAMP_SIZE):
         base = i / (RAMP_SIZE - 1)  # 0.0 -> 1.0
+
+        # Compress the range upward from the floor rather than scaling it
+        # down: white stays white, black becomes grey. Doing it the other way
+        # round would dim the whole picture, which is the brightness slider's
+        # job and would double up with it.
+        base = floor + base * (1.0 - floor)
 
         # brightness is a simple multiply — a "software dim" that never
         # touches the physical backlight. PWM-safe mode below is what pins
@@ -176,7 +216,13 @@ class GammaController:
         self.system = platform.system()  # 'Darwin', 'Windows', 'Linux'
         self._saved_hw_brightness = None  # set while PWM-safe mode is active
 
-    def apply(self, kelvin: float, brightness: float, zero_blue: bool = False) -> bool:
+    def apply(
+        self,
+        kelvin: float,
+        brightness: float,
+        zero_blue: bool = False,
+        paper: bool = False,
+    ) -> bool:
         """Push a ramp to the display. Returns False if the OS refused it.
 
         Both platforms report failure through a return value rather than an
@@ -184,7 +230,7 @@ class GammaController:
         was indistinguishable from a successful one, and the screen just
         never changed.
         """
-        red, green, blue = build_ramp(kelvin, brightness, zero_blue)
+        red, green, blue = build_ramp(kelvin, brightness, zero_blue, paper)
         if self.system == "Darwin":
             return self._apply_macos(red, green, blue)
         if self.system == "Windows":
@@ -192,8 +238,15 @@ class GammaController:
         raise RuntimeError(f"Unsupported platform: {self.system}")
 
     def reset(self) -> bool:
-        """Restore a normal, unmodified screen."""
-        return self.apply(kelvin=KELVIN_NEUTRAL, brightness=1.0)
+        """Restore a normal, unmodified screen.
+
+        Every optional mode is spelled out rather than left to the defaults,
+        so that adding another one later can't quietly make "reset" mean
+        "reset most of it".
+        """
+        return self.apply(
+            kelvin=KELVIN_NEUTRAL, brightness=1.0, zero_blue=False, paper=False
+        )
 
     # -- PWM-safe mode ---------------------------------------------------
     # The "brightness" slider above only ever dims via the gamma ramp — it

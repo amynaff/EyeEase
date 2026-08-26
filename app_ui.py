@@ -112,6 +112,7 @@ def load_settings():
         "brightness": 0.8,
         "is_on": True,
         "zero_blue": False,
+        "paper": False,
         # What zero-blue mode displaced, kept across restarts so switching
         # the mode off a week later still gives back the right warmth.
         "before_zero_blue": None,
@@ -754,6 +755,20 @@ class EyeEaseApp(ctk.CTk):
             # saved value have the app believe otherwise.
             self.settings["pwm_safe"] = False
 
+        # Its own row rather than part of the pair above: those two are the
+        # same promise taken apart, and this is a different one. Warmth and
+        # flicker are about the light coming off the panel; this is about the
+        # distance between the darkest and brightest thing on it.
+        self.paper_switch, self.paper_note = self._add_option_row(
+            card,
+            "Paper contrast",
+            self._toggle_paper,
+            first=False,
+            description="Softens black to grey, the way ink sits on a page",
+        )
+        if self.settings["paper"]:
+            self.paper_switch.select()
+
         if startup.is_supported():
             self.login_switch, self.login_note = self._add_option_row(
                 card,
@@ -1090,6 +1105,18 @@ class EyeEaseApp(ctk.CTk):
             return "no blue — backlight isn't ours to hold"
         return "no blue — can't hold this backlight"
 
+    def _toggle_paper(self):
+        """Flat contrast on or off.
+
+        Simpler than the zero-blue switch because it displaces nothing: it
+        doesn't move the sliders, doesn't touch the backlight, and doesn't
+        need to remember a previous state to give back. Warmth and brightness
+        keep meaning exactly what they meant before it was flipped, so the
+        whole toggle is one flag and a re-apply.
+        """
+        self.settings["paper"] = self.paper_switch.get() == 1
+        self._apply_current()
+
     def _toggle_zero_blue(self):
         turning_on = self.zero_blue_switch.get() == 1
 
@@ -1233,7 +1260,10 @@ class EyeEaseApp(ctk.CTk):
                 self._refresh_readouts(cur_i, cur_b)
 
             self.gamma.apply(
-                intensity_to_kelvin(cur_i), cur_b, self.settings["zero_blue"]
+                intensity_to_kelvin(cur_i),
+                cur_b,
+                self.settings["zero_blue"],
+                self.settings["paper"],
             )
 
             if n < TRANSITION_STEPS:
@@ -1365,7 +1395,10 @@ class EyeEaseApp(ctk.CTk):
         if self.settings["is_on"]:
             intensity, brightness = self._effective_values()
             applied = self.gamma.apply(
-                intensity_to_kelvin(intensity), brightness, self.settings["zero_blue"]
+                intensity_to_kelvin(intensity),
+                brightness,
+                self.settings["zero_blue"],
+                self.settings["paper"],
             )
         else:
             applied = self.gamma.reset()

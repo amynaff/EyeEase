@@ -21,9 +21,11 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from gamma import (  # noqa: E402
+    GammaController,
     KELVIN_MAX,
     KELVIN_MIN,
     KELVIN_NEUTRAL,
+    PAPER_BLACK_FLOOR,
     RAMP_SIZE,
     _planckian,
     build_ramp,
@@ -260,6 +262,119 @@ class TestZeroBlue(unittest.TestCase):
         red, green, _ = build_ramp(KELVIN_NEUTRAL, 1.0, zero_blue=True)
         top = RAMP_SIZE - 1
         self.assertGreater(red[top], green[top], "amber needs red above green")
+
+
+class TestPaperMode(unittest.TestCase):
+    """Contrast compression — black becomes grey, white stays white."""
+
+    TOP = RAMP_SIZE - 1
+
+    def test_off_by_default(self):
+        # The whole existing suite runs without passing paper=, so this is
+        # what makes those tests evidence about the default path too.
+        for kelvin in (KELVIN_MIN, 2700, KELVIN_NEUTRAL):
+            for brightness in (0.15, 0.5, 1.0):
+                self.assertEqual(
+                    build_ramp(kelvin, brightness),
+                    build_ramp(kelvin, brightness, paper=False),
+                )
+
+    def test_black_is_lifted_off_the_floor(self):
+        for name, channel in zip("rgb", build_ramp(KELVIN_NEUTRAL, 1.0, paper=True)):
+            self.assertGreater(channel[0], 0, f"{name} left black at zero")
+
+    def test_the_lift_matches_the_documented_floor(self):
+        red, _, _ = build_ramp(KELVIN_NEUTRAL, 1.0, paper=True)
+        self.assertAlmostEqual(red[0] / 65535, PAPER_BLACK_FLOOR, places=4)
+
+    def test_white_is_untouched(self):
+        # Paper mode compresses upward from the floor. If it ever started
+        # pulling the top down it would be dimming the screen, which is the
+        # brightness slider's job — and the two would fight.
+        plain = build_ramp(KELVIN_NEUTRAL, 1.0)
+        paper = build_ramp(KELVIN_NEUTRAL, 1.0, paper=True)
+        for name, a, b in zip("rgb", plain, paper):
+            self.assertEqual(a[self.TOP], b[self.TOP], f"{name} moved white")
+
+    def test_contrast_ratio_lands_near_the_documented_figure(self):
+        # The constant is chosen in encoded units but justified in luminance,
+        # so this checks the claim the comment actually makes: about 49:1,
+        # clearly softer than a panel's 1000:1 and short of paper's 15:1.
+        red, _, _ = build_ramp(KELVIN_NEUTRAL, 1.0, paper=True)
+        white = (red[self.TOP] / 65535) ** 2.2
+        black = (red[0] / 65535) ** 2.2
+        self.assertTrue(45 < white / black < 54, f"{white / black:.0f}:1")
+
+    def test_still_monotonic_and_in_range(self):
+        for kelvin in SLIDER:
+            for brightness in (0.15, 0.5, 1.0):
+                for name, channel in zip(
+                    "rgb", build_ramp(kelvin, brightness, paper=True)
+                ):
+                    self.assertGreaterEqual(min(channel), 0, f"{name} negative")
+                    self.assertLessEqual(max(channel), 65535, f"{name} over 16 bits")
+                    for i in range(1, RAMP_SIZE):
+                        self.assertGreaterEqual(
+                            channel[i], channel[i - 1], f"{name} dips at {i}"
+                        )
+
+    def test_does_not_change_the_tint(self):
+        # Contrast and colour stay orthogonal: turning paper mode on must not
+        # make the screen warmer or cooler, only flatter.
+        plain = build_ramp(2700, 1.0)
+        paper = build_ramp(2700, 1.0, paper=True)
+        for channel in (1, 2):  # green, blue against red
+            self.assertAlmostEqual(
+                plain[channel][self.TOP] / plain[0][self.TOP],
+                paper[channel][self.TOP] / paper[0][self.TOP],
+                places=3,
+            )
+
+    def test_cannot_put_blue_back_when_zero_blue_is_on(self):
+        # The floor is applied before the channel multipliers, so a zero blue
+        # multiplier still wins. This is the interaction most likely to break
+        # the promise the zero-blue switch makes, so it is asserted directly.
+        _, _, blue = build_ramp(KELVIN_NEUTRAL, 1.0, zero_blue=True, paper=True)
+        self.assertEqual(set(blue), {0}, "paper mode leaked blue past zero_blue")
+
+    def test_composes_with_brightness(self):
+        # Brightness scales what paper mode produced, floor included, so a
+        # dimmed paper screen still has a grey black rather than a black one.
+        red, _, _ = build_ramp(KELVIN_NEUTRAL, 0.5, paper=True)
+        self.assertAlmostEqual(red[0] / 65535, PAPER_BLACK_FLOOR * 0.5, places=4)
+        self.assertGreater(red[0], 0)
+
+
+class TestReset(unittest.TestCase):
+    """What "give the screen back" actually asks for.
+
+    reset() is the path taken when the app is switched off, when it quits,
+    and when it's killed — so getting it wrong leaves someone's screen tinted
+    with no app running to explain why. The OS call underneath needs a real
+    display, but which ramp reset() *asks* for doesn't, so that part is
+    tested here by intercepting apply().
+    """
+
+    def test_reset_asks_for_a_completely_untouched_screen(self):
+        controller = GammaController()
+        with mock.patch.object(
+            GammaController, "apply", return_value=True
+        ) as applied:
+            controller.reset()
+        applied.assert_called_once()
+        kwargs = applied.call_args.kwargs
+        self.assertEqual(kwargs["kelvin"], KELVIN_NEUTRAL)
+        self.assertEqual(kwargs["brightness"], 1.0)
+        # Spelled out rather than left to the defaults, so that a mode added
+        # later can't quietly make reset mean "reset most of it".
+        self.assertIs(kwargs["zero_blue"], False)
+        self.assertIs(kwargs["paper"], False)
+
+    def test_the_ramp_reset_asks_for_is_the_identity(self):
+        # The other half: that those arguments really do mean "untouched".
+        red, green, blue = build_ramp(KELVIN_NEUTRAL, 1.0, zero_blue=False, paper=False)
+        expected = [i * 257 for i in range(RAMP_SIZE)]
+        self.assertEqual([red, green, blue], [expected, expected, expected])
 
 
 class TestKelvinToHex(unittest.TestCase):
