@@ -33,7 +33,7 @@ blue falls away fast while green falls slowly — which is exactly what the
 blackbody curve in `kelvin_to_rgb()` produces.
 
 ## Install
-Grab `EyeEase-macOS.zip` from
+The current release is **v0.2.3**. Grab `EyeEase-macOS.zip` from
 [Releases](https://github.com/amynaff/EyeEase/releases), then:
 
 **macOS** — unzip it, drag `EyeEase.app` into `/Applications`, and launch it

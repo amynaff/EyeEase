@@ -56,8 +56,40 @@ if [ -z "$IDENTITY" ]; then
 fi
 echo "    $IDENTITY"
 
+echo "==> Checking the version label matches everywhere"
+# version.py is the source of truth, but two other files state the version in
+# prose, and prose doesn't import anything. Both have drifted before — the
+# site advertised a version that had already been superseded — and the drift
+# is only ever noticed after the release is out. Checking here costs nothing
+# and turns a silent wrong number into a stop.
+# Read as text, not via `import version`. Importing goes through Python's
+# bytecode cache, and a stale .pyc is served without complaint — which is
+# exactly the class of silent-wrong-value this check exists to catch. A
+# check that can itself be fed a stale answer is worse than no check.
+VERSION="$(sed -n 's/^APP_VERSION = "\(.*\)"/\1/p' version.py)"
+if [ -z "$VERSION" ]; then
+  echo "    couldn't read APP_VERSION out of version.py"
+  exit 1
+fi
+echo "    version.py says $VERSION"
+for f in README.md website/index.html; do
+  if ! grep -q "v$VERSION" "$f"; then
+    echo
+    echo "$f does not mention v$VERSION."
+    echo "Found instead:"
+    grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" "$f" | sort -u | sed 's/^/    /' || echo "    (no version at all)"
+    echo
+    echo "Bump it to match version.py, then run this again."
+    exit 1
+  fi
+  echo "    $f mentions v$VERSION"
+done
+
 echo "==> Building"
-rm -rf build dist
+# __pycache__ as well as build/dist: eyeease.spec imports version.py to set
+# CFBundleShortVersionString, and a stale .pyc there would stamp the bundle
+# with a version that isn't the one in the file.
+rm -rf build dist __pycache__
 EYEEASE_CODESIGN_IDENTITY="$IDENTITY" "$VENV/pyinstaller" --noconfirm eyeease.spec >/dev/null
 echo "    dist/EyeEase.app"
 
