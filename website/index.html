@@ -89,7 +89,7 @@ h1 {
   margin: 0 0 28px;
 }
 
-/* The two halves of the promise, each in the colour it refers to. */
+/* The two halves of the promise, each in the color it refers to. */
 h1 .lens { color: var(--lens); }
 h1 .blue  { color: var(--blue); }
 
@@ -224,7 +224,7 @@ h1 .blue  { color: var(--blue); }
 }
 
 /* A conic-gradient rather than an SVG or a canvas: the ring is 24 hours of
-   colour sliding into colour, which is precisely what a conic gradient is
+   color sliding into color, which is precisely what a conic gradient is
    for, and the browser interpolates the wedges for free. */
 .ring {
   aspect-ratio: 1;
@@ -276,7 +276,7 @@ h1 .blue  { color: var(--blue); }
   overflow: hidden;
   border: 1px solid #2a2a32;
   /* A light surface, because that's where a warm tint is actually visible.
-     Multiplying the lens colour over a near-black page would show almost
+     Multiplying the lens color over a near-black page would show almost
      nothing. */
   background: #f4f1ec;
   aspect-ratio: 16 / 10;
@@ -570,7 +570,7 @@ footer a:hover { color: var(--text); }
         <h3 class="tiph">Free, and staying that way.</h3>
         <p class="tipnote">
           No license to buy, no pro tier, nothing to unlock — the whole thing
-          is on GitHub under the MIT licence. If it saved you a headache and
+          is on GitHub under the MIT license. If it saved you a headache and
           you'd like to send something back, here's where.
         </p>
 
@@ -623,7 +623,7 @@ function planckian(kelvin) {
   return [clamp(r), clamp(g), clamp(b)];
 }
 
-// Normalised against 6500K so the neutral end is a screen we haven't touched.
+// Normalized against 6500K so the neutral end is a screen we haven't touched.
 function kelvinToRGB(kelvin) {
   const [r, g, b] = planckian(kelvin);
   const [nr, ng, nb] = planckian(6500);
@@ -695,10 +695,10 @@ function draw() {
   for (let i = 0; i <= STEPS; i++) {
     const hours = (i / STEPS) * 24;
     const f = nightFraction(latitude, hours) * depth;
-    const colour = f <= 0.004
+    const color = f <= 0.004
       ? 'var(--surface-hi)'
       : css(KELVIN_MAX - f * (KELVIN_MAX - KELVIN_MIN));
-    stops.push(`${colour} ${(i / STEPS * 360).toFixed(1)}deg`);
+    stops.push(`${color} ${(i / STEPS * 360).toFixed(1)}deg`);
   }
   // from 0deg puts midnight at the top, matching the app.
   ring.style.background = `conic-gradient(from 0deg, ${stops.join(', ')})`;

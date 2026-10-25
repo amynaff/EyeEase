@@ -26,7 +26,7 @@ SIZE = 1024
 def build_icon() -> Image.Image:
     """The bundle icon — Finder, the Dock, the installer.
 
-    Always the lens colour, unlike the menu-bar icon, which goes blue while the
+    Always the lens color, unlike the menu-bar icon, which goes blue while the
     app is off. This one is the app's identity rather than its state: it is
     mostly seen when the app isn't running at all, so there'd be no state for
     it to report even if it wanted to.

@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Notarisation requires the hardened runtime, and the hardened runtime
+  <!-- Notarization requires the hardened runtime, and the hardened runtime
        breaks CPython unless these three are granted. Python generates and
        runs code at runtime (that is what an interpreter is), which the
        runtime otherwise treats as exactly the thing it exists to stop. -->

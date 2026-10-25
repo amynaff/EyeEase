@@ -7,7 +7,7 @@ ramps are a straight line (input 100 -> output 100). We bend the green
 and blue lines downward, so no matter what color a pixel is supposed to
 be, less green/blue light actually reaches your eyes.
 
-How far we bend them is set by a colour temperature in Kelvin — the same
+How far we bend them is set by a color temperature in Kelvin — the same
 scale f.lux and Redshift use, so the numbers mean something to people who
 have used those:
 
@@ -41,19 +41,19 @@ import subprocess
 
 RAMP_SIZE = 256
 
-# Usable ends of the colour-temperature slider. 6500K is the neutral point
+# Usable ends of the color-temperature slider. 6500K is the neutral point
 # (ramp left as a straight line, screen untouched); 1200K matches the
 # warmest setting f.lux offers.
 KELVIN_NEUTRAL = 6500
 KELVIN_MIN = 1200
 KELVIN_MAX = 6500
 
-# Paper mode lifts the bottom of the ramp so black comes out dark grey
+# Paper mode lifts the bottom of the ramp so black comes out dark gray
 # instead of black, which is the single biggest difference between reading
 # off a screen and reading off a page. Paper is not warm so much as it is
 # *low contrast*: ink on paper measures somewhere around 15:1, while an LCD
 # runs 1000:1 or more, and it's that gap — pure white sitting directly
-# against pure black — that stings at night, not the colour temperature.
+# against pure black — that stings at night, not the color temperature.
 #
 # The number is in encoded (gamma-corrected) units, not luminance, because
 # that's what a gamma ramp holds. Display luminance goes roughly as the 2.2
@@ -79,7 +79,7 @@ def _planckian(kelvin: float):
 
     Tanner Helland's well-known piecewise approximation of the Planckian
     locus. Accurate to about 1% across 1000-40000K, which is far tighter
-    than the eye can resolve as a colour cast.
+    than the eye can resolve as a color cast.
     """
     kelvin = max(1000.0, min(40000.0, float(kelvin)))
     t = kelvin / 100.0
@@ -109,9 +109,9 @@ def _planckian(kelvin: float):
 
 
 def kelvin_to_rgb(kelvin: float):
-    """Colour temperature -> (r, g, b) channel multipliers, each 0.0-1.0.
+    """Color temperature -> (r, g, b) channel multipliers, each 0.0-1.0.
 
-    Normalised against the 6500K result so that kelvin=6500 returns exactly
+    Normalized against the 6500K result so that kelvin=6500 returns exactly
     (1.0, 1.0, 1.0) — a screen we haven't touched. Without that step even
     the "neutral" setting would tint slightly, since the raw curve doesn't
     hit pure white at any temperature.
@@ -124,7 +124,7 @@ def kelvin_to_rgb(kelvin: float):
 def kelvin_to_hex(kelvin: float, brightness: float = 1.0, zero_blue: bool = False) -> str:
     """The tint as a '#rrggbb' string, for showing a preview swatch in the UI.
 
-    This is the colour a white pixel ends up as, so the swatch shows the
+    This is the color a white pixel ends up as, so the swatch shows the
     user what their screen is actually about to do.
     """
     if zero_blue:
@@ -149,7 +149,7 @@ def build_ramp(
     """Returns three lists of 256 ints (0-65535) for R, G, B.
 
     paper raises the bottom of every channel to PAPER_BLACK_FLOOR, so the
-    darkest pixel the screen can produce becomes dark grey. See that constant
+    darkest pixel the screen can produce becomes dark gray. See that constant
     for why the floor sits where it does. It composes with everything else:
     warmth still tints, brightness still dims, and zero_blue still wins on
     the blue channel — a lifted floor multiplied by a zero blue multiplier is
@@ -190,7 +190,7 @@ def build_ramp(
         base = i / (RAMP_SIZE - 1)  # 0.0 -> 1.0
 
         # Compress the range upward from the floor rather than scaling it
-        # down: white stays white, black becomes grey. Doing it the other way
+        # down: white stays white, black becomes gray. Doing it the other way
         # round would dim the whole picture, which is the brightness slider's
         # job and would double up with it.
         base = floor + base * (1.0 - floor)

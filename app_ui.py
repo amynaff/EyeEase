@@ -41,7 +41,7 @@ ACCENT_HOVER = brand.LENS_BRIGHT
 ACCENT_DIM = brand.LENS_DIM
 INK = brand.INK
 
-# The off state has its own colour rather than a grey. See brand.py for
+# The off state has its own color rather than a gray. See brand.py for
 # where the blue comes from and why a blue is safe here specifically.
 OFF = brand.BLUE
 OFF_HOVER = brand.BLUE_BRIGHT
@@ -95,7 +95,7 @@ MODE_SOLAR = "Sunset/sunrise"
 
 
 def intensity_to_kelvin(intensity: float) -> float:
-    """Slider position (0.0-1.0, up = warmer) -> colour temperature."""
+    """Slider position (0.0-1.0, up = warmer) -> color temperature."""
     intensity = max(0.0, min(1.0, intensity))
     return KELVIN_MAX - intensity * (KELVIN_MAX - KELVIN_MIN)
 
@@ -156,7 +156,7 @@ class EyeEaseApp(ctk.CTk):
         self.settings = load_settings()
         self.schedule = Schedule.from_dict(self.settings["schedule"])
 
-        # Handles for pending after() callbacks so they can be cancelled on
+        # Handles for pending after() callbacks so they can be canceled on
         # close — otherwise a transition mid-flight fires against a destroyed
         # window and throws.
         self._anim_job = None
@@ -198,8 +198,8 @@ class EyeEaseApp(ctk.CTk):
 
         # The screen is a system-wide setting this process borrowed. If the
         # process dies without on_close() running, restore_display() is the
-        # last line of defence — see its docstring for why the backlight
-        # needs one and the colour doesn't.
+        # last line of defense — see its docstring for why the backlight
+        # needs one and the color doesn't.
         atexit.register(self.restore_display)
 
         # Before the UI, because building it probes the backlight — and the
@@ -373,7 +373,7 @@ class EyeEaseApp(ctk.CTk):
         """The day ring, then the two controls that feed it.
 
         The ring replaced a pair of tall vertical sliders. Those worked, but
-        they were also the single most recognisable thing about a competitor's
+        they were also the single most recognizable thing about a competitor's
         panel, and they gave the schedule — the part of this app nothing else
         does — no presence at all.
         """
@@ -533,8 +533,8 @@ class EyeEaseApp(ctk.CTk):
         self.schedule_status.pack(side="right")
 
         # Two plain buttons rather than CTkSegmentedButton: that widget uses
-        # one text colour for every segment, so whatever reads well on the
-        # accent-coloured selection is unreadable on the dark unselected one. This is
+        # one text color for every segment, so whatever reads well on the
+        # accent-colored selection is unreadable on the dark unselected one. This is
         # the same active/inactive treatment the presets row uses.
         mode_row = ctk.CTkFrame(box, fg_color="transparent")
         mode_row.pack(fill="x", padx=14, pady=(10, 0))
@@ -570,7 +570,7 @@ class EyeEaseApp(ctk.CTk):
         ).pack(side="left", padx=(8, 0))
         self.end_entry = self._add_time_entry(self.times_row, self.schedule.end)
 
-        # One field taking a city name or a raw "lat, lon" pair. Two labelled
+        # One field taking a city name or a raw "lat, lon" pair. Two labeled
         # coordinate boxes assumed the user knows their own latitude, which
         # almost nobody does — it quietly made sunset mode unreachable for
         # anyone who wasn't going to go and look it up.
@@ -717,7 +717,7 @@ class EyeEaseApp(ctk.CTk):
         return entry
 
     def _build_options_card(self):
-        """The on/off options that aren't about colour, in one card."""
+        """The on/off options that aren't about color, in one card."""
         card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=12)
         card.pack(fill="x", padx=22, pady=(0, 16))
 
@@ -764,7 +764,7 @@ class EyeEaseApp(ctk.CTk):
             "Paper contrast",
             self._toggle_paper,
             first=False,
-            description="Softens black to grey, the way ink sits on a page",
+            description="Softens black to gray, the way ink sits on a page",
         )
         if self.settings["paper"]:
             self.paper_switch.select()
@@ -850,7 +850,7 @@ class EyeEaseApp(ctk.CTk):
 
     def _build_power_button(self):
         # Two pre-rendered marks rather than one recoloured on the fly: the
-        # iris is punched in the button's own colour, so the "off" mark has
+        # iris is punched in the button's own color, so the "off" mark has
         # to be drawn against the off background to stay an eye and not a
         # blob. Both are held on self because CTkImage doesn't keep the
         # underlying PIL image alive on its own.
@@ -884,7 +884,7 @@ class EyeEaseApp(ctk.CTk):
         # the normal case — _fit_to_content() resizes the panel around it.
         self.gamma_warning = ctk.CTkLabel(
             self,
-            text="Your system refused the colour change — see README",
+            text="Your system refused the color change — see README",
             font=ctk.CTkFont(size=10),
             text_color=TEXT_MUTED,
             wraplength=PANEL_WIDTH - 60,
@@ -981,7 +981,7 @@ class EyeEaseApp(ctk.CTk):
     def _update_schedule_row(self):
         on = self.settings["auto"]
         self.schedule_status.configure(
-            # Deliberately terse: the ring's centre already carries the full
+            # Deliberately terse: the ring's center already carries the full
             # sentence, and two copies of it a few centimetres apart read as
             # a bug rather than emphasis.
             text=("on" if self.schedule.is_usable() else "needs a place") if on else "off",
@@ -1095,7 +1095,7 @@ class EyeEaseApp(ctk.CTk):
     def _zero_blue_note(self, holding: bool) -> str:
         """Say which half of the promise is real on this machine.
 
-        A laptop whose backlight we can't drive still gets the colour half,
+        A laptop whose backlight we can't drive still gets the color half,
         and that's worth having — but claiming "no flicker" there would be
         the exact lie the probe in gamma.py exists to prevent.
         """
@@ -1156,7 +1156,7 @@ class EyeEaseApp(ctk.CTk):
         self._queue_save()
 
     def _sync_zero_blue_controls(self):
-        """Grey out the controls the mode has taken over.
+        """Gray out the controls the mode has taken over.
 
         Leaving them live would let a preset quietly set a temperature that
         the ramp then overrides — the click would look like it worked and
@@ -1407,7 +1407,7 @@ class EyeEaseApp(ctk.CTk):
         self._queue_save()
 
     def _show_gamma_warning(self, failed):
-        """Say so when the OS refuses the colour change.
+        """Say so when the OS refuses the color change.
 
         Windows sanity-checks gamma ramps and rejects ones too far from
         linear, which is precisely the shape the warmest settings produce.
@@ -1428,7 +1428,7 @@ class EyeEaseApp(ctk.CTk):
     def restore_display(self):
         """Give the screen back. Touches no Tk, and is safe to call twice.
 
-        The colour half looks after itself: macOS resets the gamma table when
+        The color half looks after itself: macOS resets the gamma table when
         the process that set it dies, so a crash or a kill -9 leaves the
         screen untinted on its own.
 

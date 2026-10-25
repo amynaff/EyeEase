@@ -2,7 +2,7 @@
 #
 # Signing is driven by the environment so that an unsigned local build and a
 # release build come off the same spec. Set EYEEASE_CODESIGN_IDENTITY to the
-# full "Developer ID Application: ..." string to produce a notarisable app;
+# full "Developer ID Application: ..." string to produce a notarizable app;
 # leave it unset and PyInstaller ad-hoc signs, which is fine for local runs
 # and is rejected by Gatekeeper anywhere else.
 import os

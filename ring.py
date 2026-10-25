@@ -3,7 +3,7 @@ ring.py — draws the day ring: 24 hours of what the screen is going to do.
 
 Rendered with Pillow rather than Tk canvas arcs, because a canvas arc has
 hard edges and this is 360 adjacent wedges whose whole point is that the
-colour slides smoothly between them. Drawn at 2x and downsampled, which is
+color slides smoothly between them. Drawn at 2x and downsampled, which is
 cheaper than it sounds and is the only reason the seams disappear.
 
 The ring is a readout, never a control. Everything it shows is the product
@@ -54,14 +54,14 @@ def render(size, schedule, depth, now, auto, is_on):
             fraction = depth if is_on else 0.0
 
         if fraction <= 0.004:
-            colour = brand.SURFACE_HI
+            color = brand.SURFACE_HI
         else:
-            colour = kelvin_to_hex(_intensity_to_kelvin(fraction))
+            color = kelvin_to_hex(_intensity_to_kelvin(fraction))
 
         # -90 puts midnight at the top, so the ring reads like a clock.
         start = seg * (360 / SEGMENTS) - 90
         d.pieslice(box, start, start + (360 / SEGMENTS) + 0.7,
-                   fill=brand.hex_to_rgba(colour))
+                   fill=brand.hex_to_rgba(color))
 
     # Where we are on the ring. Without it the ring is a picture of a day in
     # the abstract — you can see that the screen warms in the evening, but

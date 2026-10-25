@@ -62,7 +62,7 @@ def _sun_for_day(longitude: float, day: datetime):
     # Solar mean anomaly.
     m = math.radians((357.5291 + 0.98560028 * mean_solar_noon) % 360.0)
 
-    # Equation of the centre — corrects the mean anomaly for the Earth's
+    # Equation of the center — corrects the mean anomaly for the Earth's
     # elliptical orbit.
     c = (
         1.9148 * math.sin(m)
