@@ -4,17 +4,17 @@ Free, minimal blue-light blocker — same underlying idea as RedShift
 (gamma-table manipulation): two sliders, three presets, one EASE button, an
 auto schedule, and it lives in the tray.
 
-**Platform status.** macOS is the tested platform: signed, notarised, and
+**Platform status.** macOS is the tested platform: signed, notarized, and
 verified end to end on real hardware. Windows is implemented but
 **unverified** — no part of it has ever been run on a Windows machine. See
 [Windows status](#windows-status) before relying on it.
 
 Either way, EyeEase changes the **primary display only**. A second monitor
-keeps its normal colour — see
+keeps its normal color — see
 [What's deliberately left out](#whats-deliberately-left-out-of-this-version).
 
 The palette is amber, not an alarm red, because amber is what the app itself
-produces at evening temperatures — the brand is the colour the product makes.
+produces at evening temperatures — the brand is the color the product makes.
 The mark is an eye, defined once in `brand.py` and shared by the app icon,
 the tray icon and the in-panel button.
 
@@ -22,7 +22,7 @@ the tray icon and the in-panel button.
 Every screen redraws pixels through a "gamma ramp" — a lookup table that maps
 input color to output color for red, green, and blue separately. This app
 bends the green and blue curves down to match a blackbody radiator at a given
-colour temperature, the same 6500K-to-1200K scale f.lux and Redshift use, so
+color temperature, the same 6500K-to-1200K scale f.lux and Redshift use, so
 less blue light reaches your eyes no matter what's on screen. Brightness
 scales all three curves together as a software dim. `gamma.py` has the full
 explanation inline.
@@ -120,7 +120,7 @@ A small panel appears with:
 - **Warmth slider** — vertical; drag up for warmer. Reads out in Kelvin,
   6500K (screen untouched) down to 1200K (deep amber, no blue left)
 - **Brightness slider** — software dim, 15% to 100%
-- **Live preview strip** — the colour a white pixel will actually become, so
+- **Live preview strip** — the color a white pixel will actually become, so
   the sliders preview themselves
 - **Three presets** — Reading (4000K), Evening (2700K), Sleep (1900K). The
   matching preset lights up when the sliders are sitting on its values
@@ -137,13 +137,13 @@ A small panel appears with:
   pinned to the warmest end so green comes down the blackbody curve with it
   and the result reads as candle-amber rather than sickly green, and the
   backlight is locked to 100% so nothing is strobing while the dimming
-  happens in the ramp. The warmth slider and presets grey out while it's on,
+  happens in the ramp. The warmth slider and presets gray out while it's on,
   because the ramp is ignoring them and a preset that silently does nothing
   is worse than a preset you can't click.
 
   The two halves fail separately, so the line under the switch says which
   one you're actually getting: *"no blue, backlight steady"* when both are
-  in force, *"no blue — can't hold this backlight"* when only the colour
+  in force, *"no blue — can't hold this backlight"* when only the color
   half is. Switching the mode off puts back the warmth and the backlight
   setting you had before it — including across a restart, since the
   displaced values are saved alongside the mode.
@@ -178,7 +178,7 @@ A small panel appears with:
   hadn't already researched the problem, which is precisely the audience the
   feature exists for.
 - **Paper contrast** — lifts the bottom of the gamma ramp so black comes out
-  dark grey instead of black. Warmth is only half of why a screen is harder
+  dark gray instead of black. Warmth is only half of why a screen is harder
   to read at night than a page; the other half is contrast. Ink on paper
   measures around 15:1, an LCD runs 1000:1 or more, and it's pure white
   sitting directly against pure black that stings.
@@ -198,13 +198,13 @@ A small panel appears with:
   screen, blue while it isn't. Blue is the light that reaches you when
   nothing is filtering it, so the icon says what's happening to your screen
   rather than which switch was pressed last. The EASE button in the panel
-  goes the same two colours.
+  goes the same two colors.
 
-  Blue is otherwise a colour this app can't use: the gamma ramp takes the
+  Blue is otherwise a color this app can't use: the gamma ramp takes the
   blue channel to zero at deep warmth, so a blue accent would darken into an
   unreadable smudge exactly when the app is working hardest (see the note at
   the top of `brand.py`). It's safe *here* and nowhere else, because blue is
-  the off state, and off means the ramp has been reset — the colour is only
+  the off state, and off means the ramp has been reset — the color is only
   ever drawn on an untouched screen.
 
   The bundle icon in Finder and the Dock stays amber. That one is the app's
@@ -276,11 +276,11 @@ list of about 225 large cities and capitals; matches appear as you type and
 ignore accents, so `sao paulo` finds São Paulo. Raw `lat, lon` works in the
 same field, with or without hemisphere letters (`40.7 N, 74.0 W`), for anyone
 who knows exactly where they are or lives somewhere the list doesn't cover.
-Unrecognised text restores the previous location rather than sitting there
+Unrecognized text restores the previous location rather than sitting there
 looking accepted, and clearing the field unsets it — the schedule then
 reports itself unusable instead of guessing.
 
-It used to ask for a latitude and a longitude in two labelled boxes. That
+It used to ask for a latitude and a longitude in two labeled boxes. That
 assumed the user knew their own latitude, which almost nobody does, and it
 quietly made this whole mode unreachable for anyone not willing to go and
 look it up.
@@ -397,7 +397,7 @@ the exact thing the mode exists to prevent. It costs one backlight read
 every 2 seconds instead, and nothing while the mode is off.
 
 ### Giving the screen back when the app dies
-The colour half needs no help: macOS resets the gamma table when the process
+The color half needs no help: macOS resets the gamma table when the process
 that set it exits, so even a `kill -9` leaves the screen untinted. The
 backlight is a persistent system setting and has no such safety net, so the
 app covers the exits one at a time:
@@ -444,7 +444,7 @@ after code changes.
 ### Releasing a signed build
 That build is ad-hoc signed, which is fine on your own machine and tells
 everybody else that macOS "could not verify this app is free of malware".
-`./release.sh` produces one that doesn't: it builds, signs, notarises with
+`./release.sh` produces one that doesn't: it builds, signs, notarizes with
 Apple, staples the ticket, and then checks what Gatekeeper will actually say
 before you upload anything.
 
@@ -452,7 +452,7 @@ It needs two things that deliberately aren't in this repo:
 
 - A **Developer ID Application** certificate in your keychain. The type
   matters. An *Apple Development* certificate signs apps for your own
-  devices and Apple refuses to notarise anything signed with it — the script
+  devices and Apple refuses to notarize anything signed with it — the script
   checks for this and says so rather than failing later inside Apple's
   pipeline. Create one at developer.apple.com → Certificates → Developer ID
   Application.
@@ -506,7 +506,7 @@ fine.
 
 `SetDeviceGammaRamp` reports this by returning false rather than raising, so
 the refusal is completely silent unless you check — which is why `apply()`
-now returns a bool and the panel shows "your system refused the colour
+now returns a bool and the panel shows "your system refused the color
 change" rather than leaving you with a slider that moves and a screen that
 doesn't.
 
@@ -544,5 +544,5 @@ be broken:
 ## License
 MIT — see [LICENSE](LICENSE). Use it, change it, ship it, sell it; just keep
 the copyright notice. The README and the site both called this open source
-long before there was a licence file saying so, which legally meant the
-opposite: no licence is all rights reserved by default.
+long before there was a license file saying so, which legally meant the
+opposite: no license is all rights reserved by default.

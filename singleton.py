@@ -65,7 +65,7 @@ def acquire() -> bool:
 
     Returns True on failure to even open the lock file. An unwritable home
     directory is a strange machine, not a reason to refuse to start — the
-    worst case is the old behaviour, and the old behaviour ran.
+    worst case is the old behavior, and the old behavior ran.
     """
     global _handle
 

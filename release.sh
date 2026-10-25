@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# release.sh — build, sign, notarise, staple, and verify a distributable app.
+# release.sh — build, sign, notarize, staple, and verify a distributable app.
 #
 # Without this, macOS tells everyone who downloads EyeEase that Apple could
 # not verify it is free of malware. That warning costs more users than any
@@ -10,7 +10,7 @@
 #
 #   1. A "Developer ID Application" certificate in your keychain. Note the
 #      type — an "Apple Development" certificate is for running on your own
-#      devices and Apple will refuse to notarise anything signed with it.
+#      devices and Apple will refuse to notarize anything signed with it.
 #      Create it at developer.apple.com → Certificates → + → Developer ID
 #      Application, download, and double-click to install.
 #
@@ -49,7 +49,7 @@ if [ -z "$IDENTITY" ]; then
   security find-identity -v -p codesigning | sed 's/[A-F0-9]\{40\}/<hash>/' || true
   echo
   echo "An 'Apple Development' certificate is not a substitute — it signs"
-  echo "apps for your own devices and Apple will reject it for notarising."
+  echo "apps for your own devices and Apple will reject it for notarizing."
   echo "Create a Developer ID Application certificate at developer.apple.com,"
   echo "download it, double-click to install, then run this again."
   exit 1
@@ -95,7 +95,7 @@ echo "    dist/EyeEase.app"
 
 echo "==> Verifying the signature and the hardened runtime"
 codesign --verify --deep --strict --verbose=2 dist/EyeEase.app
-# Notarisation is refused without the hardened runtime, and the failure
+# Notarization is refused without the hardened runtime, and the failure
 # arrives minutes later from Apple rather than here, so check it now.
 #
 # Captured into a variable rather than piped into `grep -q`. Under
@@ -107,7 +107,7 @@ SIGNATURE="$(codesign -d --verbose=2 dist/EyeEase.app 2>&1)"
 case "$SIGNATURE" in
   *"(runtime"*) ;;
   *)
-    echo "    the hardened runtime is not enabled — notarisation would be rejected"
+    echo "    the hardened runtime is not enabled — notarization would be rejected"
     echo "$SIGNATURE" | grep -i flags || true
     exit 1
     ;;
@@ -123,7 +123,7 @@ echo "==> Submitting to Apple (this usually takes a few minutes)"
 if ! xcrun notarytool submit dist/EyeEase-macOS.zip \
       --keychain-profile "$PROFILE" --wait; then
   echo
-  echo "Notarisation failed. For the reason:"
+  echo "Notarization failed. For the reason:"
   echo "  xcrun notarytool history --keychain-profile \"$PROFILE\""
   echo "  xcrun notarytool log <submission-id> --keychain-profile \"$PROFILE\""
   exit 1

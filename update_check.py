@@ -11,7 +11,7 @@ own notify() — that shells out to `osascript -e 'display notification'`,
 which turned out to be silently broken on at least one real machine (the
 "Allow Notifications" toggle for Script Editor was on, Focus was off, and
 it still never posted). NSUserNotificationCenter is older and technically
-deprecated in favour of UserNotifications.framework, but it delivers under
+deprecated in favor of UserNotifications.framework, but it delivers under
 the app's own identity with no extra pyobjc dependency and no separate
 authorization prompt, and it actually works where the AppleScript bridge
 didn't. Either way this is a plain Foundation/AppKit call, not a Tk one —

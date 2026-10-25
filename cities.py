@@ -2,7 +2,7 @@
 cities.py — a small offline gazetteer, so people can say where they are
 without knowing their own latitude.
 
-Coordinates are city-centre, to four decimal places at most and often fewer.
+Coordinates are city-center, to four decimal places at most and often fewer.
 That is deliberate: sunset moves by roughly one minute per 20km of longitude,
 so a few kilometres of error is far below anything you could notice on a
 screen that takes an hour to warm up. Anyone who wants exact numbers can
@@ -272,7 +272,7 @@ def search(query: str, limit: int = 6):
     """Cities matching `query`, best first.
 
     Prefix matches rank above interior ones so typing "san" offers San
-    Francisco before Santa Fe's neighbours — the thing you're partway through
+    Francisco before Santa Fe's neighbors — the thing you're partway through
     typing is more likely the thing you mean.
     """
     q = _fold(query).strip()

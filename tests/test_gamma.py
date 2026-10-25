@@ -1,4 +1,4 @@
-"""test_gamma.py — the colour maths, pinned down.
+"""test_gamma.py — the color maths, pinned down.
 
 These cover the pure functions in gamma.py: _planckian, kelvin_to_rgb,
 kelvin_to_hex and build_ramp. Nothing here touches a display; the OS calls
@@ -91,7 +91,7 @@ class TestPlanckian(unittest.TestCase):
 
 
 class TestKelvinToRgb(unittest.TestCase):
-    """Normalised multipliers — the layer build_ramp actually consumes."""
+    """Normalized multipliers — the layer build_ramp actually consumes."""
 
     def test_neutral_is_exactly_untouched(self):
         # Not "close to" 1.0. If 6500K tinted even slightly, the app's claim
@@ -158,7 +158,7 @@ class TestBuildRamp(unittest.TestCase):
 
     def test_entries_stay_inside_16_bit_range(self):
         # These become c_ushort on both platforms. An out-of-range value is a
-        # ctypes overflow at the boundary, not a wrong colour.
+        # ctypes overflow at the boundary, not a wrong color.
         for kelvin in SLIDER:
             for brightness in (0.15, 0.5, 1.0):
                 for name, channel in self._all_channels(kelvin, brightness):
@@ -187,7 +187,7 @@ class TestBuildRamp(unittest.TestCase):
                         )
 
     def test_brightness_scales_channels_together(self):
-        # Brightness is a dim, not a tint: halving it must not shift the colour.
+        # Brightness is a dim, not a tint: halving it must not shift the color.
         full_r, full_g, full_b = build_ramp(2700, 1.0)
         half_r, half_g, half_b = build_ramp(2700, 0.5)
         top = RAMP_SIZE - 1
@@ -242,7 +242,7 @@ class TestZeroBlue(unittest.TestCase):
         self.assertNotEqual(set(blue), {0})
 
     def test_temperature_is_pinned_regardless_of_what_was_asked_for(self):
-        # The slider greys out in the UI while this mode is on; this is the
+        # The slider grays out in the UI while this mode is on; this is the
         # matching guarantee underneath, so a stale slider value can't leak in.
         pinned = build_ramp(KELVIN_MIN, 1.0, zero_blue=True)
         for kelvin in [KELVIN_MIN, 2700, 4000, KELVIN_NEUTRAL, 99999]:
@@ -265,7 +265,7 @@ class TestZeroBlue(unittest.TestCase):
 
 
 class TestPaperMode(unittest.TestCase):
-    """Contrast compression — black becomes grey, white stays white."""
+    """Contrast compression — black becomes gray, white stays white."""
 
     TOP = RAMP_SIZE - 1
 
@@ -319,7 +319,7 @@ class TestPaperMode(unittest.TestCase):
                         )
 
     def test_does_not_change_the_tint(self):
-        # Contrast and colour stay orthogonal: turning paper mode on must not
+        # Contrast and color stay orthogonal: turning paper mode on must not
         # make the screen warmer or cooler, only flatter.
         plain = build_ramp(2700, 1.0)
         paper = build_ramp(2700, 1.0, paper=True)
@@ -339,7 +339,7 @@ class TestPaperMode(unittest.TestCase):
 
     def test_composes_with_brightness(self):
         # Brightness scales what paper mode produced, floor included, so a
-        # dimmed paper screen still has a grey black rather than a black one.
+        # dimmed paper screen still has a gray black rather than a black one.
         red, _, _ = build_ramp(KELVIN_NEUTRAL, 0.5, paper=True)
         self.assertAlmostEqual(red[0] / 65535, PAPER_BLACK_FLOOR * 0.5, places=4)
         self.assertGreater(red[0], 0)

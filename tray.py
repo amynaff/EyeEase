@@ -17,7 +17,7 @@ TRAY_ICON_SIZE = 64
 
 
 def make_icon_image(is_on: bool):
-    """The tray mark in the colour of the current state.
+    """The tray mark in the color of the current state.
 
     Amber while the app is easing the screen, blue while it isn't — blue
     being the light that gets through when nothing is filtering it. Drawn
